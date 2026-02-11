@@ -5,7 +5,7 @@
 [![AWS](https://img.shields.io/badge/AWS-Lambda%40Edge-orange)](https://aws.amazon.com/lambda/edge/)
 [![Amazon Bedrock](https://img.shields.io/badge/Amazon%20Bedrock-Claude%203.5-blue)](https://aws.amazon.com/bedrock/)
 [![Python](https://img.shields.io/badge/Python-3.9%2B-green)](https://www.python.org/)
-[![License](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 
 > AI for Bharat Hackathon 2026 | Track 02 - AI for Media, Content & Digital Experiences
 
