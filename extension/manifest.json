@@ -1,0 +1,65 @@
+{
+  "manifest_version": 3,
+  "name": "Sanchar-Optimize",
+  "version": "1.0.0",
+  "description": "Agentic Content Resiliency System - Zero-Buffer Educational Content Delivery",
+  "permissions": [
+    "storage",
+    "tabs",
+    "webRequest",
+    "geolocation",
+    "alarms"
+  ],
+  "host_permissions": [
+    "https://www.youtube.com/*",
+    "https://youtube.com/*",
+    "https://www.coursera.org/*",
+    "https://coursera.org/*",
+    "https://*/*"
+  ],
+  "background": {
+    "service_worker": "background/service-worker.js",
+    "type": "module"
+  },
+  "content_scripts": [
+    {
+      "matches": [
+        "<all_urls>"
+      ],
+      "js": [
+        "utils/telemetry.js",
+        "content/content-script.js"
+      ],
+      "css": [
+        "ui/overlay.css"
+      ],
+      "run_at": "document_idle"
+    }
+  ],
+  "action": {
+    "default_popup": "popup/popup.html",
+    "default_icon": {
+      "16": "assets/icons/icon-16.png",
+      "32": "assets/icons/icon-32.png",
+      "48": "assets/icons/icon-48.png",
+      "128": "assets/icons/icon-128.png"
+    }
+  },
+  "icons": {
+    "16": "assets/icons/icon-16.png",
+    "32": "assets/icons/icon-32.png",
+    "48": "assets/icons/icon-48.png",
+    "128": "assets/icons/icon-128.png"
+  },
+  "web_accessible_resources": [
+    {
+      "resources": [
+        "ui/overlay.html",
+        "ui/overlay.css",
+        "ui/overlay.js",
+        "assets/*"
+      ],
+      "matches": ["<all_urls>"]
+    }
+  ]
+}

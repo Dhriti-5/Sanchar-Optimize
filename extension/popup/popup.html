@@ -1,0 +1,104 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sanchar-Optimize</title>
+  <link rel="stylesheet" href="popup.css">
+</head>
+<body>
+  <div class="popup-container">
+    <!-- Header -->
+    <div class="popup-header">
+      <div class="popup-logo">
+        <span class="popup-icon">🛡️</span>
+        <h1>Sanchar-Optimize</h1>
+      </div>
+      <div class="popup-version">v1.0.0</div>
+    </div>
+
+    <!-- Status Section -->
+    <div class="popup-status">
+      <div class="status-card">
+        <div class="status-indicator" id="status-indicator"></div>
+        <div class="status-info">
+          <div class="status-label">System Status</div>
+          <div class="status-text" id="status-text">Passive Mode</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Metrics Section -->
+    <div class="popup-metrics">
+      <div class="metric-card">
+        <div class="metric-icon">📡</div>
+        <div class="metric-value" id="network-quality">Excellent</div>
+        <div class="metric-label">Network Quality</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-icon">🚄</div>
+        <div class="metric-value" id="velocity">0 km/h</div>
+        <div class="metric-label">Speed</div>
+      </div>
+
+      <div class="metric-card">
+        <div class="metric-icon">💾</div>
+        <div class="metric-value" id="data-saved">0 MB</div>
+        <div class="metric-label">Data Saved</div>
+      </div>
+    </div>
+
+    <!-- Quick Stats -->
+    <div class="popup-stats">
+      <h3>📊 Session Statistics</h3>
+      <div class="stat-row">
+        <span class="stat-label">Handshakes Performed:</span>
+        <span class="stat-value" id="handshakes">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Buffering Prevented:</span>
+        <span class="stat-value" id="buffering-prevented">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Summaries Generated:</span>
+        <span class="stat-value" id="summaries-generated">0</span>
+      </div>
+      <div class="stat-row">
+        <span class="stat-label">Monitoring Frequency:</span>
+        <span class="stat-value" id="monitoring-freq">1 Hz</span>
+      </div>
+    </div>
+
+    <!-- Controls -->
+    <div class="popup-controls">
+      <button class="btn btn-primary" id="test-handshake">
+        🧪 Test Handshake
+      </button>
+      <button class="btn btn-secondary" id="clear-cache">
+        🗑️ Clear Cache
+      </button>
+    </div>
+
+    <!-- About Section -->
+    <div class="popup-about">
+      <p class="about-text">
+        <strong>Agentic Content Resiliency</strong> for unstable networks. 
+        Predictive signal drop detection with AI-powered content transformation.
+      </p>
+      <div class="about-links">
+        <a href="#" id="view-docs">📚 Documentation</a>
+        <a href="#" id="view-github">💻 GitHub</a>
+      </div>
+    </div>
+
+    <!-- Footer -->
+    <div class="popup-footer">
+      <span class="footer-text">Made with ❤️ for Bharat</span>
+      <span class="footer-badge">AI for Bharat Hackathon 2026</span>
+    </div>
+  </div>
+
+  <script src="popup.js"></script>
+</body>
+</html>

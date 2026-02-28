@@ -1,0 +1,517 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Sanchar-Optimize Test Page - Video Player Simulator</title>
+  <style>
+    * {
+      margin: 0;
+      padding: 0;
+      box-sizing: border-box;
+    }
+
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+      background: #0f0f0f;
+      color: #ffffff;
+      padding: 2rem;
+    }
+
+    .container {
+      max-width: 1200px;
+      margin: 0 auto;
+    }
+
+    .header {
+      text-align: center;
+      margin-bottom: 2rem;
+    }
+
+    .header h1 {
+      font-size: 2.5rem;
+      margin-bottom: 0.5rem;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+      background-clip: text;
+    }
+
+    .header p {
+      color: #aaaaaa;
+      font-size: 1.125rem;
+    }
+
+    .video-section {
+      background: #1a1a1a;
+      border-radius: 1rem;
+      padding: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .video-player {
+      position: relative;
+      width: 100%;
+      background: #000;
+      border-radius: 0.5rem;
+      overflow: hidden;
+    }
+
+    video {
+      width: 100%;
+      display: block;
+    }
+
+    .video-info {
+      margin-top: 1.5rem;
+    }
+
+    .video-info h2 {
+      font-size: 1.5rem;
+      margin-bottom: 0.5rem;
+    }
+
+    .video-meta {
+      color: #aaaaaa;
+      font-size: 0.875rem;
+    }
+
+    .controls-section {
+      background: #1a1a1a;
+      border-radius: 1rem;
+      padding: 2rem;
+      margin-bottom: 2rem;
+    }
+
+    .controls-section h3 {
+      font-size: 1.25rem;
+      margin-bottom: 1.5rem;
+      color: #667eea;
+    }
+
+    .control-group {
+      margin-bottom: 1.5rem;
+    }
+
+    .control-group label {
+      display: block;
+      margin-bottom: 0.5rem;
+      color: #ffffff;
+      font-weight: 500;
+    }
+
+    .control-buttons {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+      gap: 1rem;
+    }
+
+    .btn {
+      padding: 1rem;
+      font-size: 1rem;
+      font-weight: 600;
+      border: none;
+      border-radius: 0.5rem;
+      cursor: pointer;
+      transition: all 0.2s ease;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      color: white;
+    }
+
+    .btn:hover {
+      transform: translateY(-2px);
+      box-shadow: 0 4px 12px rgba(102, 126, 234, 0.4);
+    }
+
+    .btn-secondary {
+      background: #374151;
+    }
+
+    .btn-secondary:hover {
+      background: #4b5563;
+    }
+
+    .btn-danger {
+      background: linear-gradient(135deg, #ef4444 0%, #dc2626 100%);
+    }
+
+    input[type="range"] {
+      width: 100%;
+      height: 0.5rem;
+      border-radius: 0.25rem;
+      background: #374151;
+      outline: none;
+      -webkit-appearance: none;
+    }
+
+    input[type="range"]::-webkit-slider-thumb {
+      -webkit-appearance: none;
+      appearance: none;
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 50%;
+      background: #667eea;
+      cursor: pointer;
+    }
+
+    input[type="range"]::-moz-range-thumb {
+      width: 1.25rem;
+      height: 1.25rem;
+      border-radius: 50%;
+      background: #667eea;
+      cursor: pointer;
+      border: none;
+    }
+
+    .stats-section {
+      background: #1a1a1a;
+      border-radius: 1rem;
+      padding: 2rem;
+    }
+
+    .stats-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+      gap: 1rem;
+    }
+
+    .stat-card {
+      background: #0f0f0f;
+      padding: 1.5rem;
+      border-radius: 0.5rem;
+      border: 1px solid #374151;
+    }
+
+    .stat-card h4 {
+      font-size: 0.875rem;
+      color: #aaaaaa;
+      margin-bottom: 0.5rem;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .stat-card .value {
+      font-size: 1.5rem;
+      font-weight: 700;
+      color: #667eea;
+    }
+
+    .badge {
+      display: inline-block;
+      padding: 0.25rem 0.75rem;
+      border-radius: 1rem;
+      font-size: 0.75rem;
+      font-weight: 600;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+    }
+
+    .badge-success {
+      background: rgba(16, 185, 129, 0.2);
+      color: #10b981;
+    }
+
+    .badge-warning {
+      background: rgba(251, 191, 36, 0.2);
+      color: #fbbf24;
+    }
+
+    .badge-danger {
+      background: rgba(239, 68, 68, 0.2);
+      color: #ef4444;
+    }
+
+    .instructions {
+      background: rgba(102, 126, 234, 0.1);
+      border-left: 4px solid #667eea;
+      padding: 1.5rem;
+      border-radius: 0.5rem;
+      margin-bottom: 2rem;
+    }
+
+    .instructions h3 {
+      color: #667eea;
+      margin-bottom: 1rem;
+    }
+
+    .instructions ol {
+      padding-left: 1.5rem;
+    }
+
+    .instructions li {
+      margin-bottom: 0.5rem;
+      color: #d1d5db;
+    }
+
+    #status-log {
+      background: #0f0f0f;
+      border: 1px solid #374151;
+      border-radius: 0.5rem;
+      padding: 1rem;
+      height: 200px;
+      overflow-y: auto;
+      font-family: 'Courier New', monospace;
+      font-size: 0.875rem;
+      margin-top: 1rem;
+    }
+
+    .log-entry {
+      margin-bottom: 0.5rem;
+      padding: 0.25rem 0;
+    }
+
+    .log-info {
+      color: #3b82f6;
+    }
+
+    .log-warning {
+      color: #fbbf24;
+    }
+
+    .log-error {
+      color: #ef4444;
+    }
+
+    .log-success {
+      color: #10b981;
+    }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <!-- Header -->
+    <div class="header">
+      <h1>🛡️ Sanchar-Optimize Test Page</h1>
+      <p>Extension Testing & Validation Environment</p>
+    </div>
+
+    <!-- Instructions -->
+    <div class="instructions">
+      <h3>📋 Testing Instructions</h3>
+      <ol>
+        <li>Make sure the Sanchar-Optimize extension is installed and enabled</li>
+        <li><strong>⚠️ IMPORTANT:</strong> In <code>chrome://extensions/</code>, click "Details" on Sanchar-Optimize and <strong>enable "Allow access to file URLs"</strong></li>
+        <li><strong>Reload this page</strong> after enabling file URL access</li>
+        <li>Open Chrome DevTools (F12) and check the Console tab for extension logs</li>
+        <li>Play the video below and observe the extension's behavior</li>
+        <li>Use the simulation controls to test different network conditions</li>
+        <li>Click "Simulate Signal Drop" to trigger the overlay manually</li>
+      </ol>
+    </div>
+
+    <!-- Video Section -->
+    <div class="video-section">
+      <div class="video-player">
+        <video id="test-video" controls>
+          <!-- Using Big Buck Bunny - Open source test video -->
+          <source src="https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4" type="video/mp4">
+          Your browser does not support the video tag.
+        </video>
+      </div>
+      
+      <div class="video-info">
+        <h2>Test Video: Big Buck Bunny</h2>
+        <div class="video-meta">
+          <span>Educational Content Simulator</span> • 
+          <span id="video-duration">0:00</span> • 
+          <span id="video-current-time">0:00</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- Controls Section -->
+    <div class="controls-section">
+      <h3>🎮 Simulation Controls</h3>
+      
+      <div class="control-group">
+        <label>Network Quality Simulation</label>
+        <div class="control-buttons">
+          <button class="btn" onclick="simulateNetworkQuality('4g')">
+            📡 4G Network
+          </button>
+          <button class="btn btn-secondary" onclick="simulateNetworkQuality('3g')">
+            📱 3G Network
+          </button>
+          <button class="btn btn-secondary" onclick="simulateNetworkQuality('2g')">
+            📶 2G Network
+          </button>
+          <button class="btn btn-danger" onclick="simulateNetworkQuality('offline')">
+            ❌ Offline
+          </button>
+        </div>
+      </div>
+
+      <div class="control-group">
+        <label>Speed Simulation (km/h): <span id="speed-value">0</span></label>
+        <input type="range" id="speed-slider" min="0" max="150" value="0" 
+               oninput="updateSpeed(this.value)">
+      </div>
+
+      <div class="control-group">
+        <label>Extension Actions</label>
+        <div class="control-buttons">
+          <button class="btn" onclick="triggerHandshake()">
+            🔄 Simulate Signal Drop
+          </button>
+          <button class="btn btn-secondary" onclick="showExtensionPopup()">
+            📊 Open Extension Popup
+          </button>
+          <button class="btn btn-secondary" onclick="clearLogs()">
+            🗑️ Clear Logs
+          </button>
+        </div>
+      </div>
+    </div>
+
+    <!-- Stats Section -->
+    <div class="stats-section">
+      <h3>📊 Real-Time Statistics</h3>
+      <div class="stats-grid">
+        <div class="stat-card">
+          <h4>Extension Status</h4>
+          <div class="value" id="extension-status">
+            <span class="badge badge-success">Active</span>
+          </div>
+        </div>
+
+        <div class="stat-card">
+          <h4>Network Quality</h4>
+          <div class="value" id="network-status">Unknown</div>
+        </div>
+
+        <div class="stat-card">
+          <h4>Current Speed</h4>
+          <div class="value" id="current-speed">0 km/h</div>
+        </div>
+
+        <div class="stat-card">
+          <h4>Video Position</h4>
+          <div class="value" id="video-position">0:00</div>
+        </div>
+      </div>
+
+      <div id="status-log">
+        <div class="log-entry log-info">[INFO] Test page loaded. Waiting for extension...</div>
+      </div>
+    </div>
+  </div>
+
+  <script>
+    const video = document.getElementById('test-video');
+    let mockSpeed = 0;
+
+    // Video event listeners
+    video.addEventListener('loadedmetadata', () => {
+      updateVideoInfo();
+      logMessage('info', 'Video metadata loaded');
+    });
+
+    video.addEventListener('timeupdate', () => {
+      updateVideoInfo();
+    });
+
+    video.addEventListener('play', () => {
+      logMessage('success', 'Video playing');
+    });
+
+    video.addEventListener('pause', () => {
+      logMessage('warning', 'Video paused');
+    });
+
+    // Update video information
+    function updateVideoInfo() {
+      const duration = formatTime(video.duration);
+      const currentTime = formatTime(video.currentTime);
+      
+      document.getElementById('video-duration').textContent = duration;
+      document.getElementById('video-current-time').textContent = currentTime;
+      document.getElementById('video-position').textContent = currentTime;
+    }
+
+    // Format time helper
+    function formatTime(seconds) {
+      if (isNaN(seconds)) return '0:00';
+      const mins = Math.floor(seconds / 60);
+      const secs = Math.floor(seconds % 60);
+      return `${mins}:${secs.toString().padStart(2, '0')}`;
+    }
+
+    // Simulate network quality
+    function simulateNetworkQuality(quality) {
+      logMessage('info', `Simulating ${quality.toUpperCase()} network`);
+      document.getElementById('network-status').textContent = quality.toUpperCase();
+      
+      // In a real scenario, this would be detected by the extension
+      // For testing, we're just logging it
+    }
+
+    // Update speed
+    function updateSpeed(value) {
+      mockSpeed = parseInt(value);
+      document.getElementById('speed-value').textContent = value;
+      document.getElementById('current-speed').textContent = `${value} km/h`;
+      
+      logMessage('info', `Speed updated to ${value} km/h`);
+      
+      if (mockSpeed > 60) {
+        logMessage('warning', 'High-speed detected - Extension should increase polling frequency');
+      }
+    }
+
+    // Trigger handshake manually
+    function triggerHandshake() {
+      logMessage('warning', 'Manual handshake triggered');
+      logMessage('info', 'Extension should show overlay with AI summary');
+      
+      // Try to communicate with extension if available
+      if (window.postMessage) {
+        window.postMessage({
+          type: 'TEST_HANDSHAKE',
+          source: 'sanchar-test-page'
+        }, '*');
+      }
+    }
+
+    // Show extension popup
+    function showExtensionPopup() {
+      logMessage('info', 'Click the extension icon in the toolbar to view the popup');
+    }
+
+    // Clear logs
+    function clearLogs() {
+      document.getElementById('status-log').innerHTML = 
+        '<div class="log-entry log-info">[INFO] Logs cleared</div>';
+    }
+
+    // Log message helper
+    function logMessage(type, message) {
+      const log = document.getElementById('status-log');
+      const timestamp = new Date().toLocaleTimeString();
+      const entry = document.createElement('div');
+      entry.className = `log-entry log-${type}`;
+      entry.textContent = `[${timestamp}] [${type.toUpperCase()}] ${message}`;
+      log.appendChild(entry);
+      log.scrollTop = log.scrollHeight;
+    }
+
+    // Check for extension
+    window.addEventListener('load', () => {
+      setTimeout(() => {
+        if (window.telemetryAgent) {
+          logMessage('success', 'Sanchar-Optimize extension detected!');
+          document.getElementById('extension-status').innerHTML = 
+            '<span class="badge badge-success">Active</span>';
+        } else {
+          logMessage('error', 'Extension not detected. Please install and reload.');
+          document.getElementById('extension-status').innerHTML = 
+            '<span class="badge badge-danger">Not Found</span>';
+        }
+      }, 1000);
+    });
+
+    // Log initial message
+    logMessage('info', 'Test page initialized');
+    logMessage('info', 'Checking for Sanchar-Optimize extension...');
+  </script>
+</body>
+</html>
