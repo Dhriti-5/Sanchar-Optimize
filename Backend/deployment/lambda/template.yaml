@@ -1,0 +1,173 @@
+# AWS SAM Template for Lambda@Edge deployment
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: Sanchar-Optimize Lambda@Edge Functions
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 5
+    MemorySize: 256
+    Environment:
+      Variables:
+        ENVIRONMENT: production
+        LOG_LEVEL: INFO
+
+Resources:
+  # Network Sentry Function
+  NetworkSentryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sanchar-optimize-network-sentry
+      CodeUri: ../../
+      Handler: app.lambda_handlers.network_sentry.handler
+      Description: Network Sentry Agent for signal drop prediction
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - timestream:WriteRecords
+              Resource: '*'
+      Environment:
+        Variables:
+          TIMESTREAM_DATABASE: !Ref TimestreamDatabase
+          TIMESTREAM_TABLE: !Ref TimestreamTable
+
+  # Modality Orchestrator Function
+  ModalityOrchestratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sanchar-optimize-modality-orchestrator
+      CodeUri: ../../
+      Handler: app.lambda_handlers.modality_orchestrator.handler
+      Description: Modality Orchestrator for AI-powered decisions
+      Timeout: 10
+      MemorySize: 512
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - dynamodb:PutItem
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: '*'
+      Environment:
+        Variables:
+          BEDROCK_MODEL_ID: anthropic.claude-3-5-sonnet-20240620-v1:0
+          DYNAMODB_TABLE: !Ref SessionStateTable
+
+  # Multi-Modal Transformer Function
+  MultiModalTransformerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: sanchar-optimize-transformer
+      CodeUri: ../../
+      Handler: app.lambda_handlers.transformer.handler
+      Description: Multi-Modal Transformer for content summarization
+      Timeout: 30
+      MemorySize: 1024
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+                - s3:PutObject
+                - s3:GetObject
+              Resource: '*'
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref ContentBucket
+
+  # Timestream Database
+  TimestreamDatabase:
+    Type: AWS::Timestream::Database
+    Properties:
+      DatabaseName: sanchar-optimize
+
+  # Timestream Table for telemetry
+  TimestreamTable:
+    Type: AWS::Timestream::Table
+    Properties:
+      DatabaseName: !Ref TimestreamDatabase
+      TableName: network-telemetry
+      RetentionProperties:
+        MemoryStoreRetentionPeriodInHours: 24
+        MagneticStoreRetentionPeriodInDays: 30
+
+  # DynamoDB Table for session state
+  SessionStateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: sanchar-optimize-sessions
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+        - AttributeName: device_id
+          AttributeType: S
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+      GlobalSecondaryIndexes:
+        - IndexName: device-index
+          KeySchema:
+            - AttributeName: device_id
+              KeyType: HASH
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+
+  # S3 Bucket for content storage
+  ContentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'sanchar-optimize-content-${AWS::AccountId}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldSummaries
+            Status: Enabled
+            ExpirationInDays: 7
+            Prefix: cache/summaries/
+
+Outputs:
+  NetworkSentryFunctionArn:
+    Description: ARN of Network Sentry Function
+    Value: !GetAtt NetworkSentryFunction.Arn
+    Export:
+      Name: NetworkSentryFunctionArn
+
+  ModalityOrchestratorFunctionArn:
+    Description: ARN of Modality Orchestrator Function
+    Value: !GetAtt ModalityOrchestratorFunction.Arn
+    Export:
+      Name: ModalityOrchestratorFunctionArn
+
+  MultiModalTransformerFunctionArn:
+    Description: ARN of Multi-Modal Transformer Function
+    Value: !GetAtt MultiModalTransformerFunction.Arn
+    Export:
+      Name: MultiModalTransformerFunctionArn
+
+  TimestreamDatabaseName:
+    Description: Name of Timestream Database
+    Value: !Ref TimestreamDatabase
+
+  SessionStateTableName:
+    Description: Name of DynamoDB Session State Table
+    Value: !Ref SessionStateTable
+
+  ContentBucketName:
+    Description: Name of S3 Content Bucket
+    Value: !Ref ContentBucket
