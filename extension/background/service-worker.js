@@ -3,6 +3,18 @@
  * The "Brain" of the extension - Orchestrates network monitoring and agent communication
  */
 
+// Backend API instance (will be initialized dynamically)
+let backendAPI = null;
+let isBackendAvailable = false;
+let BackendAPI = null;
+
+// Try to import Backend API Client (Phase 2 Integration)
+try {
+  importScripts('../utils/api-client.js');
+} catch (error) {
+  console.warn('⚠️ Could not load api-client.js:', error.message);
+}
+
 // ==========================================
 // 1. STATE MANAGEMENT
 // ==========================================
@@ -24,7 +36,7 @@ let userSessions = new Map(); // tabId -> session data
 // ==========================================
 // 2. INITIALIZATION
 // ==========================================
-chrome.runtime.onInstalled.addListener(() => {
+chrome.runtime.onInstalled.addListener(async () => {
   console.log('🚀 Sanchar-Optimize Extension Installed');
   
   // Set initial icon (green - passive state)
@@ -38,15 +50,55 @@ chrome.runtime.onInstalled.addListener(() => {
     sessionMemory: {}
   });
   
+  // Initialize backend connection (Phase 2)
+  await initializeBackendConnection();
+  
   // Start monitoring
   startNetworkMonitoring();
 });
 
 // Listen for extension startup
-chrome.runtime.onStartup.addListener(() => {
+chrome.runtime.onStartup.addListener(async () => {
   console.log('🔄 Sanchar-Optimize Extension Started');
+  await initializeBackendConnection();
   startNetworkMonitoring();
 });
+
+// ==========================================
+// 2.5 BACKEND CONNECTION (Phase 2)
+// ==========================================
+async function initializeBackendConnection() {
+  try {
+    backendAPI = typeof BackendAPI !== 'undefined' ? new BackendAPI() : null;
+    if (backendAPI) {
+      isBackendAvailable = await backendAPI.checkHealth();
+      if (isBackendAvailable) {
+        console.log('🏥 Backend connected: Phase 2 features enabled');
+      } else {
+        console.warn('⚠️ Backend unavailable: Using Phase 1 fallback mode');
+      }
+    } else {
+      console.warn('⚠️ Backend API not loaded: Using Phase 1 fallback mode');
+      isBackendAvailable = false;
+    }
+  } catch (error) {
+    console.warn('⚠️ Backend connection failed:', error.message);
+    isBackendAvailable = false;
+  }
+
+  // Periodic health check every 5 minutes
+  setInterval(async () => {
+    if (backendAPI) {
+      const wasAvailable = isBackendAvailable;
+      isBackendAvailable = await backendAPI.checkHealth();
+      if (isBackendAvailable && !wasAvailable) {
+        console.log('✅ Backend recovered: Phase 2 features re-enabled');
+      } else if (!isBackendAvailable && wasAvailable) {
+        console.warn('⚠️ Backend lost: Falling back to Phase 1 mode');
+      }
+    }
+  }, 5 * 60 * 1000); // 5 minutes
+}
 
 // Handle service worker activation (after being suspended)
 self.addEventListener('activate', (event) => {
@@ -162,7 +214,7 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ==========================================
 // 5. TELEMETRY HANDLERS
 // ==========================================
-function handleNetworkTelemetry(data, tab) {
+async function handleNetworkTelemetry(data, tab) {
   const { effectiveType, downlink, rtt, saveData } = data;
   
   // Store in telemetry history
@@ -177,12 +229,64 @@ function handleNetworkTelemetry(data, tab) {
   
   telemetryHistory.push(telemetryEntry);
   
-  // Predict signal drop using simplified heuristic (LSTM will be added in Sprint 1.5)
-  const prediction = predictSignalDrop(telemetryEntry);
+  // Submit telemetry to backend (Phase 2) in batches
+  if (isBackendAvailable && backendAPI && telemetryHistory.length % 5 === 0) {
+    submitTelemetryToBackend(tab);
+  }
+  
+  // Predict signal drop - use backend LSTM if available, else heuristic
+  const prediction = await predictSignalDrop(telemetryEntry, tab);
   
   if (prediction.dropPredicted) {
     handlePredictedDrop(prediction, tab);
   }
+}
+
+// Submit batched telemetry to backend
+async function submitTelemetryToBackend(tab) {
+  if (!isBackendAvailable || !backendAPI) return;
+  
+  try {
+    const session = userSessions.get(tab.id) || {};
+    const gpsData = session.lastGPS || {};
+    
+    // Convert recent telemetry to backend format
+    const recentTelemetry = telemetryHistory.slice(-10).map(t => ({
+      timestamp: t.timestamp / 1000, // Convert to seconds
+      signal_strength_dbm: estimateSignalStrength(t.downlink),
+      bandwidth_kbps: (t.downlink || 0) * 1000, // Mbps to Kbps
+      latency_ms: t.rtt || 0,
+      packet_loss_percent: estimatePacketLoss(t.effectiveType),
+      effective_type: t.effectiveType,
+      gps_latitude: gpsData.latitude || 0,
+      gps_longitude: gpsData.longitude || 0,
+      gps_velocity_kmh: gpsData.velocity || 0
+    }));
+    
+    await backendAPI.submitTelemetryBatch(recentTelemetry);
+    console.log('📊 Batch telemetry submitted to backend');
+  } catch (error) {
+    console.warn('⚠️ Failed to submit telemetry:', error.message);
+  }
+}
+
+// Helper: Estimate signal strength from bandwidth
+function estimateSignalStrength(downlinkMbps) {
+  // Rough estimation: Good signal = -60 to -70 dBm, Poor = -90 to -100 dBm
+  if (!downlinkMbps || downlinkMbps < 0.1) return -100;
+  if (downlinkMbps > 10) return -60;
+  return -100 + (downlinkMbps * 4); // Linear approximation
+}
+
+// Helper: Estimate packet loss from connection type
+function estimatePacketLoss(effectiveType) {
+  const lossMap = {
+    '4g': 0.5,
+    '3g': 2.0,
+    '2g': 5.0,
+    'slow-2g': 10.0
+  };
+  return lossMap[effectiveType] || 1.0;
 }
 
 function handleGPSVelocity(data, tab) {
@@ -239,25 +343,58 @@ function handleVideoMetadata(data, tab) {
 // ==========================================
 // 6. PREDICTION LOGIC (Simplified LSTM)
 // ==========================================
-function predictSignalDrop(currentTelemetry) {
-  // Phase 1: Simplified heuristic-based prediction
-  // Phase 2 will integrate actual LSTM model
+async function predictSignalDrop(currentTelemetry, tab) {
+  // Phase 2: Use backend LSTM prediction if available, else fallback to heuristic
   
   if (telemetryHistory.length < 10) {
     return { dropPredicted: false, confidence: 0 };
   }
   
-  // Get last 10 samples
-  const recentSamples = telemetryHistory.slice(-10);
+  // Try backend prediction first (Phase 2)
+  if (isBackendAvailable && backendAPI) {
+    try {
+      const session = userSessions.get(tab.id) || {};
+      const gpsData = session.lastGPS || {};
+      
+      // Convert recent telemetry for backend
+      const recentTelemetry = telemetryHistory.slice(-20).map(t => ({
+        timestamp: t.timestamp / 1000,
+        signal_strength_dbm: estimateSignalStrength(t.downlink),
+        bandwidth_kbps: (t.downlink || 0) * 1000,
+        latency_ms: t.rtt || 0,
+        packet_loss_percent: estimatePacketLoss(t.effectiveType),
+        effective_type: t.effectiveType,
+        gps_latitude: gpsData.latitude || 0,
+        gps_longitude: gpsData.longitude || 0,
+        gps_velocity_kmh: gpsData.velocity || 0
+      }));
+      
+      const prediction = await backendAPI.getPrediction(recentTelemetry);
+      
+      if (prediction.will_drop) {
+        console.warn(`🔮 Backend prediction: Signal drop in ${prediction.time_to_drop_sec}s (confidence: ${(prediction.confidence * 100).toFixed(0)}%)`);
+      }
+      
+      return {
+        dropPredicted: prediction.will_drop,
+        confidence: prediction.confidence,
+        horizonSeconds: prediction.time_to_drop_sec || 5,
+        reasoning: {
+          model: prediction.model_used,
+          predictedSignal: prediction.predicted_signal_strength_dbm,
+          recommendedAction: prediction.recommended_action
+        }
+      };
+    } catch (error) {
+      console.warn('⚠️ Backend prediction failed, using heuristic:', error.message);
+      // Fall through to heuristic fallback
+    }
+  }
   
-  // Calculate trend
+  // Phase 1 Fallback: Heuristic-based prediction
+  const recentSamples = telemetryHistory.slice(-10);
   const downlinkTrend = calculateTrend(recentSamples.map(s => s.downlink));
   const rttTrend = calculateTrend(recentSamples.map(s => s.rtt));
-  
-  // Prediction criteria:
-  // 1. Downlink dropping rapidly (>30% decrease)
-  // 2. RTT increasing significantly (>50% increase)
-  // 3. Current downlink < 0.5 Mbps
   
   const currentDownlink = currentTelemetry.downlink || 0;
   const isDownlinkLow = currentDownlink < 0.5;
@@ -272,14 +409,15 @@ function predictSignalDrop(currentTelemetry) {
   const dropPredicted = confidence > 0.75;
   
   if (dropPredicted) {
-    console.warn(`⚠️ Signal drop predicted! Confidence: ${(confidence * 100).toFixed(0)}%`);
+    console.warn(`⚠️ Heuristic prediction: Signal drop! Confidence: ${(confidence * 100).toFixed(0)}%`);
   }
   
   return {
     dropPredicted,
     confidence,
-    horizonSeconds: 5, // Predicting 5 seconds ahead
+    horizonSeconds: 5,
     reasoning: {
+      model: 'heuristic',
       downlink: currentDownlink,
       downlinkTrend,
       rttTrend,

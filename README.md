@@ -100,10 +100,41 @@ Unlike reactive ABR, Sanchar-Optimize uses AI agents powered by **Amazon Bedrock
 - Geographic distribution for rural accessibility
 - Automatic failover to regional infrastructure
 
+## � Quick Start
+
+### Phase 1: Chrome Extension (✅ Complete)
+Chrome extension with local telemetry collection and heuristic prediction.
+
+### Phase 2: Backend & AI Integration (✅ Complete)
+Production-grade FastAPI backend with Amazon Bedrock integration.
+
+**Get Started in 5 Minutes:**
+
+```powershell
+# 1. Start the backend
+cd Backend
+python -m venv venv
+.\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+python main.py
+
+# 2. Load extension in Chrome
+# Go to chrome://extensions/
+# Enable "Developer mode"
+# Click "Load unpacked" → select extension/ folder
+
+# 3. Test on any YouTube video!
+```
+
+**📖 See [QUICK_START_PHASE2.md](QUICK_START_PHASE2.md) for detailed setup instructions.**
+
 ## 📚 Documentation
 
-- [Requirements Document](requirements.md) - Detailed functional requirements
-- [Design Document](design.md) - Architecture and implementation details
+- **[Phase 2 Quick Start](QUICK_START_PHASE2.md)** - Get running in 5 minutes
+- **[Phase 2 Integration Guide](PHASE2_INTEGRATION_GUIDE.md)** - Extension-backend integration
+- **[Backend README](Backend/README.md)** - Backend API documentation
+- **[Requirements Document](requirements.md)** - Detailed functional requirements
+- **[Design Document](design.md)** - Architecture and implementation details
 
 ## 🏆 Why This is Truly Agentic
 
