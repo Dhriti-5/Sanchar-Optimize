@@ -13,8 +13,10 @@ from app.models.telemetry import (
     PredictionRequest,
     PredictionResponse
 )
+from app.models.telemetry_extended import EnhancedTelemetryData
 from app.services.network_sentry import NetworkSentryAgent
 from app.ml.model_loader import ModelLoader
+from app.aws.timestream_client import timestream_client
 
 logger = logging.getLogger(__name__)
 
@@ -71,6 +73,72 @@ async def submit_telemetry(telemetry: NetworkTelemetry):
             )
     except Exception as e:
         logger.error(f"Telemetry submission error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.post("/telemetry/enhanced", status_code=status.HTTP_201_CREATED)
+async def submit_enhanced_telemetry(telemetry: EnhancedTelemetryData):
+    """
+    Submit enhanced telemetry with persistent storage to Timestream
+    
+    This endpoint provides scalable historical telemetry tracking
+    for shadow zone detection and pattern analysis
+    
+    Args:
+        telemetry: Enhanced telemetry data with location
+        
+    Returns:
+        Success status
+    """
+    try:
+        # Store in Timestream for historical analysis
+        timestream_success = await timestream_client.write_telemetry(
+            session_id=telemetry.session_id,
+            signal_strength=telemetry.signal_strength,
+            latency=telemetry.latency,
+            packet_loss=telemetry.packet_loss,
+            bandwidth_mbps=telemetry.bandwidth_mbps,
+            velocity_kmh=telemetry.velocity_kmh,
+            latitude=telemetry.latitude,
+            longitude=telemetry.longitude,
+            network_type=telemetry.network_type
+        )
+        
+        # Also ingest into Network Sentry for real-time prediction
+        basic_telemetry = NetworkTelemetry(
+            device_id=telemetry.session_id,  # Use session_id as device_id
+            session_id=telemetry.session_id,
+            signal_strength=telemetry.signal_strength,
+            latency=telemetry.latency,
+            bandwidth_mbps=telemetry.bandwidth_mbps,
+            velocity_kmh=telemetry.velocity_kmh,
+            packet_loss=telemetry.packet_loss
+        )
+        
+        sentry = get_network_sentry()
+        sentry_success = sentry.ingest_telemetry(basic_telemetry)
+        
+        status_msg = "success"
+        if not timestream_success and not sentry_success:
+            status_msg = "failed"
+        elif not timestream_success:
+            status_msg = "partial_success_no_persistence"
+        elif not sentry_success:
+            status_msg = "partial_success_no_prediction"
+        
+        return {
+            "status": status_msg,
+            "message": "Enhanced telemetry processed",
+            "session_id": telemetry.session_id,
+            "timestream_stored": timestream_success,
+            "sentry_ingested": sentry_success
+        }
+        
+    except Exception as e:
+        logger.error(f"Enhanced telemetry submission error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)
@@ -227,6 +295,129 @@ async def clear_session_telemetry(device_id: str, session_id: str):
         
     except Exception as e:
         logger.error(f"Session clear error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/telemetry/location/history")
+async def get_location_history(
+    latitude: float,
+    longitude: float,
+    time_range_hours: int = 24
+):
+    """
+    Get historical network patterns for a geographic location
+    
+    This powers predictive intelligence by analyzing past network behavior
+    in specific areas (e.g., known dead zones on train routes)
+    
+    Args:
+        latitude: GPS latitude
+        longitude: GPS longitude
+        time_range_hours: Hours of history to retrieve (default 24)
+        
+    Returns:
+        Historical telemetry data
+    """
+    try:
+        history = await timestream_client.query_historical_patterns(
+            latitude=latitude,
+            longitude=longitude,
+            time_range_hours=time_range_hours
+        )
+        
+        return {
+            "location": {"latitude": latitude, "longitude": longitude},
+            "time_range_hours": time_range_hours,
+            "record_count": len(history),
+            "history": history
+        }
+        
+    except Exception as e:
+        logger.error(f"Location history error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/telemetry/location/statistics")
+async def get_location_statistics(
+    latitude: float,
+    longitude: float,
+    time_range_hours: int = 168  # 7 days
+):
+    """
+    Get statistical summary of network conditions for a location
+    
+    Used for "Speculative Agent" pre-caching decisions
+    
+    Args:
+        latitude: GPS latitude
+        longitude: GPS longitude
+        time_range_hours: Analysis time window (default 7 days)
+        
+    Returns:
+        Statistical metrics
+    """
+    try:
+        stats = await timestream_client.get_location_statistics(
+            latitude=latitude,
+            longitude=longitude,
+            time_range_hours=time_range_hours
+        )
+        
+        return {
+            "location": {"latitude": latitude, "longitude": longitude},
+            "time_range_hours": time_range_hours,
+            "statistics": stats
+        }
+        
+    except Exception as e:
+        logger.error(f"Location statistics error: {e}")
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=str(e)
+        )
+
+
+@router.get("/telemetry/shadow-zones")
+async def get_shadow_zones(min_samples: int = 50):
+    """
+    Identify geographic "shadow zones" with consistently poor network
+    
+    Powers the pre-caching strategy by identifying high-risk areas
+    where content should be pre-downloaded
+    
+    Args:
+        min_samples: Minimum samples required to classify a zone
+        
+    Returns:
+        List of shadow zones with risk classification
+    """
+    try:
+        zones = await timestream_client.identify_shadow_zones(min_samples=min_samples)
+        
+        # Classify risk level
+        for zone in zones:
+            signal = zone['avg_signal_strength']
+            if signal < 30:
+                zone['risk_level'] = 'high'
+            elif signal < 50:
+                zone['risk_level'] = 'medium'
+            else:
+                zone['risk_level'] = 'low'
+        
+        return {
+            "zone_count": len(zones),
+            "min_samples": min_samples,
+            "shadow_zones": zones
+        }
+        
+    except Exception as e:
+        logger.error(f"Shadow zones error: {e}")
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail=str(e)

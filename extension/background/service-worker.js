@@ -171,6 +171,18 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
   console.log('📨 Message received:', message.type);
   
   switch (message.type) {
+    case 'SESSION_INIT':
+      handleSessionInit(message.data, sender.tab)
+        .then(result => respond({ status: 'success', result }))
+        .catch(error => respond({ status: 'error', error: error.message }));
+      return true; // Keep channel open for async response
+      
+    case 'PERSIST_TELEMETRY':
+      handlePersistTelemetry(message.data, sender.tab)
+        .then(result => respond({ status: 'success', result }))
+        .catch(error => respond({ status: 'error', error: error.message }));
+      return true; // Keep channel open for async response
+      
     case 'NETWORK_TELEMETRY':
       handleNetworkTelemetry(message.data, sender.tab);
       respond({ status: 'received' });
@@ -214,6 +226,59 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
 // ==========================================
 // 5. TELEMETRY HANDLERS
 // ==========================================
+async function handleSessionInit(data, tab) {
+  const { session_id } = data;
+  
+  console.log('📋 Initializing session:', session_id);
+  
+  // Store session in user sessions
+  if (!userSessions.has(tab.id)) {
+    userSessions.set(tab.id, {});
+  }
+  
+  const session = userSessions.get(tab.id);
+  session.session_id = session_id;
+  session.initialized_at = Date.now();
+  
+  // Create session in backend
+  if (isBackendAvailable && backendAPI) {
+    try {
+      const result = await backendAPI.createSession(session_id, 'web');
+      console.log('📋 Backend session created:', result);
+      return result;
+    } catch (error) {
+      console.error('Failed to create backend session:', error);
+      return { status: 'local_only', session_id };
+    }
+  }
+  
+  return { status: 'local_only', session_id };
+}
+
+async function handlePersistTelemetry(data, tab) {
+  const { telemetry_batch } = data;
+  
+  console.log('💾 Persisting telemetry batch:', telemetry_batch.length, 'records');
+  
+  // Submit enhanced telemetry to backend
+  if (isBackendAvailable && backendAPI) {
+    try {
+      const results = [];
+      for (const telemetry of telemetry_batch) {
+        const result = await backendAPI.submitEnhancedTelemetry(telemetry);
+        results.push(result);
+      }
+      console.log('💾 Enhanced telemetry persisted:', results.length, 'records');
+      return { status: 'success', count: results.length };
+    } catch (error) {
+      console.error('Failed to persist telemetry:', error);
+      return { status: 'error', error: error.message };
+    }
+  }
+  
+  return { status: 'backend_unavailable' };
+}
+
 async function handleNetworkTelemetry(data, tab) {
   const { effectiveType, downlink, rtt, saveData } = data;
   

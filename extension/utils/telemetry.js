@@ -12,6 +12,41 @@ class TelemetryAgent {
     this.lastPosition = null;
     this.lastVelocity = 0;
     this.mockSpeed = 0; // For simulated speed ramping
+    this.sessionId = null; // Phase 3: Session tracking
+    this.telemetryBuffer = []; // Phase 3: Buffer for enhanced telemetry
+    this.lastPersistTime = 0;
+    this.persistInterval = 10000; // Persist every 10 seconds
+  }
+
+  /**
+   * Initialize session (Phase 3)
+   */
+  async initializeSession() {
+    // Generate or retrieve session ID from storage
+    try {
+      const stored = await chrome.storage.local.get('sessionId');
+      if (stored.sessionId) {
+        this.sessionId = stored.sessionId;
+        console.log('📋 Resuming session:', this.sessionId);
+      } else {
+        this.sessionId = this._generateSessionId();
+        await chrome.storage.local.set({ sessionId: this.sessionId });
+        console.log('📋 New session created:', this.sessionId);
+      }
+      
+      // Notify background script of session
+      this.sendToBackground('SESSION_INIT', { session_id: this.sessionId });
+    } catch (error) {
+      console.error('Failed to initialize session:', error);
+      this.sessionId = this._generateSessionId();
+    }
+  }
+
+  /**
+   * Generate session ID
+   */
+  _generateSessionId() {
+    return 'session_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
   }
 
   /**
@@ -82,7 +117,101 @@ class TelemetryAgent {
     // Send to background script
     this.sendToBackground('NETWORK_TELEMETRY', telemetry);
 
+    // Phase 3: Build enhanced telemetry for persistent storage
+    if (this.sessionId) {
+      this.buildEnhancedTelemetry(telemetry);
+    }
+
     return telemetry;
+  }
+
+  /**
+   * Build enhanced telemetry with location (Phase 3)
+   */
+  buildEnhancedTelemetry(basicTelemetry) {
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    
+    // Convert browser metrics to our expected format
+    const enhancedData = {
+      session_id: this.sessionId,
+      signal_strength: this._estimateSignalStrength(connection),
+      latency: connection.rtt || 100,
+      packet_loss: 0, // Browser API doesn't provide this directly
+      bandwidth_mbps: connection.downlink || 1.0,
+      velocity_kmh: this.lastVelocity || 0,
+      latitude: this.lastPosition?.latitude || null,
+      longitude: this.lastPosition?.longitude || null,
+      network_type: this._normalizeNetworkType(connection.effectiveType),
+      effective_type: connection.effectiveType || 'unknown',
+      timestamp: Date.now()
+    };
+
+    // Add to buffer
+    this.telemetryBuffer.push(enhancedData);
+
+    // Persist if enough time has passed
+    const now = Date.now();
+    if (now - this.lastPersistTime > this.persistInterval) {
+      this.persistEnhancedTelemetry();
+    }
+  }
+
+  /**
+   * Estimate signal strength from connection quality
+   */
+  _estimateSignalStrength(connection) {
+    const effectiveType = connection.effectiveType || '4g';
+    const downlink = connection.downlink || 1.0;
+    const rtt = connection.rtt || 100;
+
+    // Heuristic signal strength estimation
+    let baseStrength = 0;
+    switch (effectiveType) {
+      case 'slow-2g': baseStrength = 20; break;
+      case '2g': baseStrength = 40; break;
+      case '3g': baseStrength = 60; break;
+      case '4g': baseStrength = 80; break;
+      default: baseStrength = 70;
+    }
+
+    // Adjust based on bandwidth
+    const bandwidthBonus = Math.min(20, downlink * 2);
+    
+    // Adjust based on latency (lower is better)
+    const latencyPenalty = Math.min(20, rtt / 50);
+
+    const strength = Math.max(0, Math.min(100, baseStrength + bandwidthBonus - latencyPenalty));
+    return strength;
+  }
+
+  /**
+   * Normalize network type to standard format
+   */
+  _normalizeNetworkType(effectiveType) {
+    if (!effectiveType || effectiveType === 'unknown') return '4g';
+    if (effectiveType.includes('2g')) return '2g';
+    if (effectiveType.includes('3g')) return '3g';
+    if (effectiveType.includes('4g')) return '4g';
+    if (effectiveType.includes('5g')) return '5g';
+    return '4g';
+  }
+
+  /**
+   * Persist enhanced telemetry to backend
+   */
+  async persistEnhancedTelemetry() {
+    if (this.telemetryBuffer.length === 0) {
+      return;
+    }
+
+    // Send to background for backend submission
+    this.sendToBackground('PERSIST_TELEMETRY', {
+      telemetry_batch: [...this.telemetryBuffer]
+    });
+
+    // Clear buffer
+    this.telemetryBuffer = [];
+    this.lastPersistTime = Date.now();
   }
 
   /**
@@ -333,4 +462,9 @@ class TelemetryAgent {
 // Create global instance
 window.telemetryAgent = new TelemetryAgent();
 
-console.log('📊 Telemetry Agent loaded');
+// Initialize session on load
+window.telemetryAgent.initializeSession().catch(err => {
+  console.error('Failed to initialize session:', err);
+});
+
+console.log('📊 Telemetry Agent loaded (Phase 3 - Enhanced)');

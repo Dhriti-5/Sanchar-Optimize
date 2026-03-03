@@ -223,22 +223,37 @@ class LSTMPredictor:
         current_bandwidth = bandwidths[-1]
         current_latency = latencies[-1]
         
-        # Heuristic rules
-        signal_declining = signal_trend < -0.05  # Declining more than 5% per sample
+        # Heuristic rules - detect concerning trends
+        # Note: signal_strength is normalized 0-1, bandwidth/latency remain in original units
+        signal_declining = signal_trend < -0.004  # Declining more than 0.4% per sample (normalized)
         bandwidth_declining = bandwidth_trend < -100  # Declining more than 100 Kbps per sample
-        latency_increasing = latency_trend > 50  # Increasing more than 50ms per sample
+        latency_increasing = latency_trend > 5  # Increasing more than 5ms per sample
         
         # Calculate confidence based on multiple indicators
         indicators_triggered = sum([signal_declining, bandwidth_declining, latency_increasing])
-        base_confidence = 0.6 if indicators_triggered >= 2 else 0.0
         
-        # Adjust confidence based on severity
-        if current_signal < 0.3:
-            base_confidence += 0.2
-        if current_bandwidth < 500:
+        # More aggressive confidence calculation
+        base_confidence = 0.3 if indicators_triggered >= 1 else 0.0
+        if indicators_triggered >= 2:
+            base_confidence = 0.6
+        if indicators_triggered >= 3:
+            base_confidence = 0.75  # Strong signal
+        
+        # Adjust confidence based on severity (critical thresholds)
+        if current_signal < 0.40:  # Below 40% (0.4 normalized)
             base_confidence += 0.15
-        if current_latency > 500:
+        if current_bandwidth < 3000:  # Below 3 Mbps
             base_confidence += 0.15
+        if current_latency > 120:  # Above 120ms
+            base_confidence += 0.10
+        
+        # Adjust based on trend magnitude
+        if abs(signal_trend) > 0.004:  # Strong declining trend (normalized)
+            base_confidence += 0.10
+        if abs(bandwidth_trend) > 100:  # Strong bandwidth decline
+            base_confidence += 0.10
+        if abs(latency_trend) > 5:  # Strong latency increase
+            base_confidence += 0.10
         
         confidence = min(1.0, base_confidence)
         
