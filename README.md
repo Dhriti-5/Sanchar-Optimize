@@ -108,6 +108,12 @@ Chrome extension with local telemetry collection and heuristic prediction.
 ### Phase 2: Backend & AI Integration (✅ Complete)
 Production-grade FastAPI backend with Amazon Bedrock integration.
 
+### Phase 3: LSTM Prediction & ML Pipeline (✅ Complete)
+Network prediction models with time-series analysis and training pipeline.
+
+### Phase 4: AWS Lambda Deployment (✅ Complete)
+Serverless deployment with Lambda functions, DynamoDB sessions, and production infrastructure.
+
 **Get Started in 5 Minutes:**
 
 ```powershell
@@ -126,12 +132,11 @@ python main.py
 # 3. Test on any YouTube video!
 ```
 
-**📖 See [QUICK_START_PHASE2.md](QUICK_START_PHASE2.md) for detailed setup instructions.**
+**📖 See [START_HERE_DEPLOYMENT.md](START_HERE_DEPLOYMENT.md) for AWS deployment instructions.**
 
 ## 📚 Documentation
 
-- **[Phase 2 Quick Start](QUICK_START_PHASE2.md)** - Get running in 5 minutes
-- **[Phase 2 Integration Guide](PHASE2_INTEGRATION_GUIDE.md)** - Extension-backend integration
+- **[AWS Deployment Guide](START_HERE_DEPLOYMENT.md)** - Complete AWS deployment instructions
 - **[Backend README](Backend/README.md)** - Backend API documentation
 - **[Requirements Document](requirements.md)** - Detailed functional requirements
 - **[Design Document](design.md)** - Architecture and implementation details

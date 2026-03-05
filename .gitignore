@@ -1,12 +1,10 @@
 # Project-level gitignore for Sanchar-Optimize
 
-# Markdown documentation files
-*.md
-
 # Test files
 test_*.py
 test_*.txt
 test_*.html
+check_*.py
 **/test/
 **/tests/
 
