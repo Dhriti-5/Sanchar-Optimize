@@ -1,0 +1,560 @@
+# AWS SAM Template for Sanchar-Optimize
+# Production-grade serverless deployment with Lambda, API Gateway, DynamoDB, S3, Bedrock
+# Cost-optimized for rural India and high-scale deployments
+
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'Sanchar-Optimize: Agentic Content Resiliency System - Production Deployment'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label:
+          default: "Environment Configuration"
+        Parameters:
+          - EnvironmentName
+          - AllowMockResponses
+          - LogLevel
+
+Parameters:
+  EnvironmentName:
+    Type: String
+    Default: production
+    Description: Environment name (development/staging/production)
+    AllowedValues:
+      - development
+      - staging
+      - production
+
+  AllowMockResponses:
+    Type: String
+    Default: 'false'
+    Description: Allow mock responses when AWS services unavailable
+    AllowedValues:
+      - 'true'
+      - 'false'
+
+  LogLevel:
+    Type: String
+    Default: INFO
+    Description: CloudWatch log level
+    AllowedValues:
+      - DEBUG
+      - INFO
+      - WARNING
+      - ERROR
+
+
+Globals:
+  Function:
+    Runtime: python3.11
+    Timeout: 30
+    MemorySize: 512
+    Architectures:
+      - x86_64
+    EphemeralStorage:
+      Size: 1024
+    Environment:
+      Variables:
+        ENVIRONMENT: !Ref EnvironmentName
+        LOG_LEVEL: !Ref LogLevel
+        BEDROCK_ALLOW_MOCK_RESPONSES: !Ref AllowMockResponses
+        ALLOW_SYNTHETIC_CONTENT_FALLBACK: 'false'
+
+
+Resources:
+
+  # ============================================================================
+  # API Gateway
+  # ============================================================================
+
+  SancharOptimizeApi:
+    Type: AWS::Serverless::Api
+    Properties:
+      Name: !Sub 'sanchar-optimize-api-${EnvironmentName}'
+      StageName: !Sub '${EnvironmentName}'
+      TracingEnabled: true
+      MethodSettings:
+        - ResourcePath: '/*'
+          HttpMethod: '*'
+          LoggingLevel: INFO
+          DataTraceEnabled: true
+          MetricsEnabled: true
+          ThrottlingBurstLimit: 5000
+          ThrottlingRateLimit: 2000
+      Cors:
+        AllowMethods: "'GET, POST, PUT, DELETE, OPTIONS'"
+        AllowHeaders: "'Content-Type, Authorization, X-Amz-Date, X-Api-Key'"
+        AllowOrigin: "'*'"
+      Auth:
+        DefaultAuthorizer: ApiKeyAuthorizer
+        ApiKeyRequired: false
+
+  ApiKeyAuthorizer:
+    Type: AWS::ApiGateway::ApiKey
+    Properties:
+      Name: !Sub 'sanchar-optimize-key-${EnvironmentName}'
+      Description: API key for Sanchar-Optimize backend
+      Enabled: true
+
+
+  # ============================================================================
+  # Main Backend (FastAPI Application)
+  # ============================================================================
+
+  BackendFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'sanchar-optimize-backend-${EnvironmentName}'
+      CodeUri: ../../
+      Handler: app.lambda_handlers.backend.handler
+      Description: FastAPI backend for Sanchar-Optimize
+      Timeout: 60
+      MemorySize: 1024
+      ReservedConcurrentExecutions: 100
+      Architectures:
+        - x86_64
+      EphemeralStorage:
+        Size: 2048
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref ContentBucket
+          DYNAMODB_TABLE: !Ref SessionStateTable
+          TIMESTREAM_DATABASE: !Ref TimestreamDatabase
+          TIMESTREAM_TABLE: !Ref TimestreamTable
+          BEDROCK_MODEL_ID: 'anthropic.claude-3-5-sonnet-20240620-v1:0'
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - CloudWatchPutMetricAlarmPolicy: {}
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::1:foundation-model/*'
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+                - s3:ListBucket
+              Resource:
+                - !GetAtt ContentBucket.Arn
+                - !Sub '${ContentBucket.Arn}/*'
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:PutItem
+                - dynamodb:UpdateItem
+                - dynamodb:Query
+                - dynamodb:Scan
+              Resource:
+                - !GetAtt SessionStateTable.Arn
+                - !Sub '${SessionStateTable.Arn}/index/*'
+            - Effect: Allow
+              Action:
+                - timestream:WriteRecords
+                - timestream:DescribeTable
+              Resource: !Sub 'arn:aws:timestream:${AWS::Region}:${AWS::AccountId}:database/${TimestreamDatabase}/table/${TimestreamTable}'
+      Events:
+        ApiEvent:
+          Type: Api
+          Properties:
+            RestApiId: !Ref SancharOptimizeApi
+            Path: /{proxy+}
+            Method: ANY
+
+
+  # ============================================================================
+  # Network Sentry Agent (Lambda)
+  # ============================================================================
+
+  NetworkSentryFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'sanchar-optimize-network-sentry-${EnvironmentName}'
+      CodeUri: ../../
+      Handler: app.lambda_handlers.network_sentry.handler
+      ReservedConcurrentExecutions: 50
+      Description: Network Sentry Agent for signal drop prediction
+      Environment:
+        Variables:
+          TIMESTREAM_DATABASE: !Ref TimestreamDatabase
+          TIMESTREAM_TABLE: !Ref TimestreamTable
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - timestream:WriteRecords
+              Resource: !Sub 'arn:aws:timestream:${AWS::Region}:${AWS::AccountId}:database/${TimestreamDatabase}/table/${TimestreamTable}'
+      Events:
+        ScheduledInvoke:
+          Type: Schedule
+          Properties:
+            Schedule: 'rate(1 minute)'
+
+
+  # ============================================================================
+  # Modality Orchestrator (Lambda)
+  # ============================================================================
+
+  ModalityOrchestratorFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'sanchar-optimize-modality-orchestrator-${EnvironmentName}'
+      CodeUri: ../../
+      Handler: app.lambda_handlers.modality_orchestrator.handler
+      ReservedConcurrentExecutions: 50
+      Timeout: 10
+      MemorySize: 512
+      Description: Modality Orchestrator for AI-powered decisions
+      Environment:
+        Variables:
+          BEDROCK_MODEL_ID: 'anthropic.claude-3-5-sonnet-20240620-v1:0'
+          DYNAMODB_TABLE: !Ref SessionStateTable
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::1:foundation-model/*'
+            - Effect: Allow
+              Action:
+                - dynamodb:GetItem
+                - dynamodb:UpdateItem
+              Resource: !GetAtt SessionStateTable.Arn
+
+
+  # ============================================================================
+  # Multi-Modal Transformer (Lambda)
+  # ============================================================================
+
+  MultiModalTransformerFunction:
+    Type: AWS::Serverless::Function
+    Properties:
+      FunctionName: !Sub 'sanchar-optimize-transformer-${EnvironmentName}'
+      CodeUri: ../../
+      Handler: app.lambda_handlers.transformer.handler
+      ReservedConcurrentExecutions: 20
+      Timeout: 30
+      MemorySize: 1024
+      EphemeralStorage:
+        Size: 2048
+      Description: Multi-Modal Transformer for content summarization
+      Environment:
+        Variables:
+          S3_BUCKET: !Ref ContentBucket
+          BEDROCK_MODEL_ID: 'anthropic.claude-3-5-sonnet-20240620-v1:0'
+      Policies:
+        - AWSLambdaBasicExecutionRole
+        - Statement:
+            - Effect: Allow
+              Action:
+                - bedrock:InvokeModel
+              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::1:foundation-model/*'
+            - Effect: Allow
+              Action:
+                - s3:GetObject
+                - s3:PutObject
+              Resource: !Sub '${ContentBucket.Arn}/*'
+
+
+  # ============================================================================
+  # CloudWatch Alarms for Monitoring
+  # ============================================================================
+
+  BackendFunctionErrorAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'sanchar-optimize-backend-errors-${EnvironmentName}'
+      DisplayName: Backend Function Error Rate
+      MetricName: Errors
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 300
+      EvaluationPeriods: 1
+      Threshold: 10
+      ComparisonOperator: GreaterThanThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref BackendFunction
+      TreatMissingData: notBreaching
+
+  BackendFunctionThrottleAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+      AlarmName: !Sub 'sanchar-optimize-backend-throttles-${EnvironmentName}'
+      DisplayName: Backend Function Throttles
+      MetricName: Throttles
+      Namespace: AWS/Lambda
+      Statistic: Sum
+      Period: 60
+      EvaluationPeriods: 1
+      Threshold: 1
+      ComparisonOperator: GreaterThanOrEqualToThreshold
+      Dimensions:
+        - Name: FunctionName
+          Value: !Ref BackendFunction
+      TreatMissingData: notBreaching
+
+
+  # ============================================================================
+  # Data Storage: Timestream (Time-Series Telemetry)
+  # ============================================================================
+
+  TimestreamDatabase:
+    Type: AWS::Timestream::Database
+    Properties:
+      DatabaseName: !Sub 'sanchar-optimize-db-${EnvironmentName}'
+
+  TimestreamTable:
+    Type: AWS::Timestream::Table
+    Properties:
+      DatabaseName: !Ref TimestreamDatabase
+      TableName: network-telemetry
+      RetentionProperties:
+        MemoryStoreRetentionPeriodInHours: 24
+        MagneticStoreRetentionPeriodInDays: 30
+
+
+  # ============================================================================
+  # Data Storage: DynamoDB (Session State)
+  # ============================================================================
+
+  SessionStateTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'sanchar-optimize-sessions-${EnvironmentName}'
+      BillingMode: PAY_PER_REQUEST  # Cost-optimized: pay only for actual requests
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+        - AttributeName: device_id
+          AttributeType: S
+        - AttributeName: created_at
+          AttributeType: N
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+        - AttributeName: created_at
+          KeyType: RANGE
+      GlobalSecondaryIndexes:
+        - IndexName: device-index
+          KeySchema:
+            - AttributeName: device_id
+              KeyType: HASH
+            - AttributeName: created_at
+              KeyType: RANGE
+          Projection:
+            ProjectionType: ALL
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      StreamSpecification:
+        StreamViewType: NEW_AND_OLD_IMAGES
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  ContentCacheTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'sanchar-optimize-cache-${EnvironmentName}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: content_id
+          AttributeType: S
+        - AttributeName: segment_start_time
+          AttributeType: N
+      KeySchema:
+        - AttributeName: content_id
+          KeyType: HASH
+        - AttributeName: segment_start_time
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================================
+  # Data Storage: S3 (Content Cache and Summaries)
+  # ============================================================================
+
+  ContentBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketName: !Sub 'sanchar-optimize-content-${AWS::AccountId}-${EnvironmentName}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: AES256
+      VersioningConfiguration:
+        Status: Enabled
+      LifecycleConfiguration:
+        Rules:
+          - Id: DeleteOldCacheSummaries
+            Status: Enabled
+            ExpirationInDays: 7
+            Prefix: cache/summaries/
+          - Id: TransitionToGlacier
+            Status: Enabled
+            Transitions:
+              - TransitionInDays: 30
+                StorageClass: GLACIER
+            Prefix: archive/
+          - Id: DeleteIncompleteMultipartUploads
+            Status: Enabled
+            AbortIncompleteMultipartUpload:
+              DaysAfterInitiation: 7
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+
+  # ============================================================================
+  # Lambda Execution Logs (CloudWatch)
+  # ============================================================================
+
+  LambdaLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName: !Sub '/aws/lambda/sanchar-optimize-${EnvironmentName}'
+      RetentionInDays: 14
+
+
+  # ============================================================================
+  # CloudWatch Dashboard for Monitoring
+  # ============================================================================
+
+  MonitoringDashboard:
+    Type: AWS::CloudWatch::Dashboard
+    Properties:
+      DashboardName: !Sub 'sanchar-optimize-${EnvironmentName}'
+      DashboardBody: !Sub |
+        {
+          "widgets": [
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [ "AWS/Lambda", "Invocations", { "stat": "Sum" } ],
+                  [ ".", "Errors", { "stat": "Sum" } ],
+                  [ ".", "Throttles", { "stat": "Sum" } ],
+                  [ ".", "Duration", { "stat": "Average" } ]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "Lambda Metrics"
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [ "AWS/ApiGateway", "Count", { "stat": "Sum" } ],
+                  [ ".", "4XXError", { "stat": "Sum" } ],
+                  [ ".", "5XXError", { "stat": "Sum" } ]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "API Gateway Metrics"
+              }
+            },
+            {
+              "type": "metric",
+              "properties": {
+                "metrics": [
+                  [ "AWS/DynamoDB", "ConsumedWriteCapacityUnits", { "stat": "Sum" } ],
+                  [ ".", "ConsumedReadCapacityUnits", { "stat": "Sum" } ],
+                  [ ".", "UserErrors", { "stat": "Sum" } ]
+                ],
+                "period": 300,
+                "stat": "Average",
+                "region": "${AWS::Region}",
+                "title": "DynamoDB Metrics"
+              }
+            }
+          ]
+        }
+
+
+Outputs:
+
+  # API Gateway
+  ApiEndpoint:
+    Description: Backend API Endpoint URL
+    Value: !Sub 'https://${SancharOptimizeApi}.execute-api.${AWS::Region}.amazonaws.com/${EnvironmentName}/'
+    Export:
+      Name: !Sub '${EnvironmentName}-ApiEndpoint'
+
+  # Lambda Functions
+  BackendFunctionArn:
+    Description: Backend Lambda Function ARN
+    Value: !GetAtt BackendFunction.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-BackendFunctionArn'
+
+  NetworkSentryFunctionArn:
+    Description: Network Sentry Lambda Function ARN
+    Value: !GetAtt NetworkSentryFunction.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-NetworkSentryArn'
+
+  ModalityOrchestratorFunctionArn:
+    Description: Modality Orchestrator Lambda Function ARN
+    Value: !GetAtt ModalityOrchestratorFunction.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-ModalityOrchestratorArn'
+
+  TransformerFunctionArn:
+    Description: Multi-Modal Transformer Lambda Function ARN
+    Value: !GetAtt MultiModalTransformerFunction.Arn
+    Export:
+      Name: !Sub '${EnvironmentName}-TransformerArn'
+
+  # Data Storage
+  TimestreamDatabaseName:
+    Description: Timestream Database Name
+    Value: !Ref TimestreamDatabase
+    Export:
+      Name: !Sub '${EnvironmentName}-TimestreamDatabase'
+
+  SessionStateTableName:
+    Description: DynamoDB Session State Table Name
+    Value: !Ref SessionStateTable
+    Export:
+      Name: !Sub '${EnvironmentName}-SessionStateTable'
+
+  ContentCacheTableName:
+    Description: DynamoDB Content Cache Table Name
+    Value: !Ref ContentCacheTable
+    Export:
+      Name: !Sub '${EnvironmentName}-ContentCacheTable'
+
+  ContentBucketName:
+    Description: S3 Content Bucket Name
+    Value: !Ref ContentBucket
+    Export:
+      Name: !Sub '${EnvironmentName}-ContentBucket'
+
+  # Monitoring
+  DashboardUrl:
+    Description: CloudWatch Dashboard URL
+    Value: !Sub 'https://console.aws.amazon.com/cloudwatch/home?region=${AWS::Region}#dashboards:name=${MonitoringDashboard}'
+
+  LogGroupName:
+    Description: CloudWatch Log Group for Lambda Logs
+    Value: !Ref LambdaLogGroup
+    Export:
+      Name: !Sub '${EnvironmentName}-LogGroupName'

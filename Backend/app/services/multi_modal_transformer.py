@@ -68,6 +68,14 @@ class MultiModalTransformer:
             logger.info(f"Transforming content {request.content_id}: "
                        f"{request.start_time:.1f}s - {request.end_time:.1f}s")
             
+            if request.transcript_hint:
+                self.transcript_cache[request.content_id] = TranscriptCache(
+                    content_id=request.content_id,
+                    transcript=request.transcript_hint,
+                    timestamps=[],
+                    ttl_seconds=settings.TRANSCRIPT_CACHE_TTL_SECONDS
+                )
+            
             # Check cache first
             cache_key = self._get_cache_key(request)
             cached_summary = self._get_cached_summary(cache_key)
@@ -92,10 +100,18 @@ class MultiModalTransformer:
             )
             
             # Extract visual context
-            visual_context = await self.extract_visual_context(
-                content_id=request.content_id,
-                timestamp=(request.start_time + request.end_time) / 2
-            )
+            try:
+                visual_context = await self.extract_visual_context(
+                    content_id=request.content_id,
+                    timestamp=(request.start_time + request.end_time) / 2,
+                    visual_context_hint=request.visual_context_hint,
+                    key_concepts_hint=request.key_concepts_hint
+                )
+            except TypeError:
+                visual_context = await self.extract_visual_context(
+                    content_id=request.content_id,
+                    timestamp=(request.start_time + request.end_time) / 2
+                )
             
             # Build content segment
             segment = ContentSegment(
@@ -111,6 +127,20 @@ class MultiModalTransformer:
             
             # Generate summary using RAG pipeline
             summary = await self.generate_summary(segment, request)
+
+            if request.include_images and segment.has_visual_elements:
+                key_frame_url = await self.generate_key_frame(
+                    content_id=request.content_id,
+                    timestamp=(request.start_time + request.end_time) / 2,
+                    visual_context=segment.visual_description or ""
+                )
+                summary.images.append(key_frame_url)
+                summary.diagrams.append({
+                    "type": "key_frame",
+                    "format": "webp",
+                    "url": key_frame_url,
+                    "timestamp": (request.start_time + request.end_time) / 2
+                })
             
             # Compress if needed
             if request.target_size_kb:
@@ -169,40 +199,29 @@ class MultiModalTransformer:
                     end_time
                 )
         
-        # In production: Call speech-to-text service or retrieve from database
-        # For now, return mock transcript
-        logger.warning(f"No cached transcript for {content_id}. Using mock.")
-        
-        mock_transcript = f"""
-        [Educational content from {start_time:.1f}s to {end_time:.1f}s]
-        
-        In this section, we explore fundamental concepts that are essential for understanding 
-        the topic. The key points covered include the definition of core terms, practical 
-        applications, and real-world examples that illustrate the concepts clearly.
-        
-        We begin by examining the theoretical foundation, then move to practical demonstrations 
-        that show how these principles work in practice. This approach helps build intuition 
-        while maintaining rigor.
-        
-        The visual elements accompanying this section include diagrams showing the relationship 
-        between different components, graphs illustrating key trends, and step-by-step 
-        walkthroughs of example problems.
-        """
-        
-        # Cache the transcript
-        self.transcript_cache[content_id] = TranscriptCache(
-            content_id=content_id,
-            transcript=mock_transcript,
-            timestamps=[],
-            ttl_seconds=settings.TRANSCRIPT_CACHE_TTL_SECONDS
-        )
-        
-        return mock_transcript
+        if settings.ALLOW_SYNTHETIC_CONTENT_FALLBACK:
+            logger.warning(f"No cached transcript for {content_id}. Using synthetic fallback transcript.")
+            synthetic_transcript = (
+                f"[Synthetic fallback transcript for {content_id} "
+                f"between {start_time:.1f}s and {end_time:.1f}s]"
+            )
+            self.transcript_cache[content_id] = TranscriptCache(
+                content_id=content_id,
+                transcript=synthetic_transcript,
+                timestamps=[],
+                ttl_seconds=settings.TRANSCRIPT_CACHE_TTL_SECONDS
+            )
+            return synthetic_transcript
+
+        logger.warning(f"No transcript available for {content_id}. Continuing without transcript context.")
+        return ""
     
     async def extract_visual_context(
         self,
         content_id: str,
-        timestamp: float
+        timestamp: float,
+        visual_context_hint: Optional[str] = None,
+        key_concepts_hint: Optional[List[str]] = None
     ) -> Dict[str, Any]:
         """
         Extract visual context from video frames
@@ -214,16 +233,29 @@ class MultiModalTransformer:
         Returns:
             Visual context dictionary
         """
-        # In production: Use computer vision to analyze frames
-        # For now, return mock visual context
-        
         logger.debug(f"Extracting visual context for {content_id} at {timestamp:.1f}s")
-        
+
+        if visual_context_hint or key_concepts_hint:
+            return {
+                "has_visual_elements": bool(visual_context_hint),
+                "description": visual_context_hint,
+                "key_concepts": key_concepts_hint or [],
+                "visual_dependency_score": 0.6 if visual_context_hint else 0.3
+            }
+
+        if settings.ALLOW_SYNTHETIC_CONTENT_FALLBACK:
+            return {
+                "has_visual_elements": True,
+                "description": "Synthetic fallback visual context",
+                "key_concepts": ["fallback context"],
+                "visual_dependency_score": 0.5
+            }
+
         return {
-            "has_visual_elements": True,
-            "description": "Video contains diagrams and equations on whiteboard",
-            "key_concepts": ["mathematical formulas", "step-by-step derivation", "graph visualization"],
-            "visual_dependency_score": 0.7
+            "has_visual_elements": False,
+            "description": None,
+            "key_concepts": [],
+            "visual_dependency_score": 0.2
         }
     
     async def generate_summary(
@@ -261,33 +293,26 @@ Respond with valid JSON only."""
             system_prompt=system_prompt,
             temperature=0.3
         )
-        
+
         if response.get("success"):
-            # Parse summary JSON
             try:
                 summary_data = json.loads(response["content"])
-                
-                # Calculate metrics
                 original_size = len(segment.transcript) if segment.transcript else 1000
                 summary_size = len(summary_data.get("text", ""))
                 compression_ratio = summary_size / original_size
-                
-                # Create summary object
-                summary = Summary(
+
+                return Summary(
                     content_id=segment.content_id,
                     segment_id=segment.segment_id,
                     text=summary_data.get("text", ""),
                     key_concepts=summary_data.get("key_concepts", []),
                     key_points=summary_data.get("key_points", []),
-                    images=[],  # Would be generated separately
+                    images=[],
                     diagrams=[],
                     original_duration_seconds=segment.end_time - segment.start_time,
                     compression_ratio=compression_ratio,
                     semantic_coverage_score=summary_data.get("coverage_score", 0.85)
                 )
-                
-                return summary
-                
             except json.JSONDecodeError:
                 logger.error("Failed to parse Bedrock summary JSON")
                 return self._get_fallback_summary(segment)
@@ -300,16 +325,7 @@ Respond with valid JSON only."""
         summary: Summary,
         target_size_kb: int
     ) -> Summary:
-        """
-        Compress summary to target size
-        
-        Args:
-            summary: Original summary
-            target_size_kb: Target size in KB
-            
-        Returns:
-            Compressed summary
-        """
+        """Compress summary to target size"""
         current_size_kb = len(summary.text.encode('utf-8')) / 1024
         
         if current_size_kb <= target_size_kb:
@@ -323,10 +339,10 @@ Respond with valid JSON only."""
         
         # Intelligently compress (in production, use Bedrock to rewrite more concisely)
         # For now, simple truncation with ellipsis
+        original_length = max(len(summary.text), 1)
         compressed_text = summary.text[:target_chars-3] + "..."
-        
         summary.text = compressed_text
-        summary.compression_ratio = len(compressed_text) / len(summary.text)
+        summary.compression_ratio = len(compressed_text) / original_length
         
         return summary
     
@@ -352,6 +368,17 @@ Respond with valid JSON only."""
         
         image_id = hashlib.md5(f"{concept}:{context}".encode()).hexdigest()[:12]
         return f"s3://{settings.S3_BUCKET_NAME}/images/{image_id}.png"
+
+    async def generate_key_frame(
+        self,
+        content_id: str,
+        timestamp: float,
+        visual_context: str
+    ) -> str:
+        logger.info(f"Generating key frame for {content_id} at {timestamp:.1f}s")
+        key = f"{content_id}:{timestamp:.1f}:{visual_context[:64]}"
+        image_id = hashlib.md5(key.encode()).hexdigest()[:12]
+        return f"s3://{settings.S3_BUCKET_NAME}/images/keyframe_{image_id}.webp"
     
     def _build_rag_prompt(
         self,

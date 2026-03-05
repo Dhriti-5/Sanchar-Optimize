@@ -62,6 +62,25 @@ class ModalityTransition(BaseModel):
     network_conditions: Dict[str, Any] = Field(..., description="Network metrics at transition")
 
 
+class ResumeSyncRequest(BaseModel):
+    """Request model for resume timestamp mapping"""
+    content_id: str = Field(..., description="Content identifier")
+    fallback_timestamp: float = Field(..., ge=0, description="Current known video timestamp")
+    summary_read_seconds: float = Field(0, ge=0, description="Seconds user spent reading summary")
+    summary_anchor_text: Optional[str] = Field(None, description="Last semantic point read by user")
+    content_duration_seconds: Optional[float] = Field(None, ge=0, description="Optional total content duration")
+
+
+class ResumeSyncResponse(BaseModel):
+    """Response model for resume timestamp mapping"""
+    status: str
+    mapped_timestamp: float = Field(..., ge=0)
+    source_position: Optional[float] = None
+    applied_offset_seconds: float = Field(default=0, ge=0)
+    semantic_anchor: Optional[str] = None
+    message: str
+
+
 class EnhancedTelemetryData(BaseModel):
     """Enhanced telemetry with session and location"""
     session_id: str

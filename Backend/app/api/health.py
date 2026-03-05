@@ -8,6 +8,10 @@ from pydantic import BaseModel
 from datetime import datetime
 import logging
 
+from app.aws.bedrock_client import BedrockClient
+from app.aws.dynamodb_client import dynamodb_client
+from app.aws.timestream_client import timestream_client
+
 logger = logging.getLogger(__name__)
 
 router = APIRouter()
@@ -48,10 +52,12 @@ async def readiness_check():
     Readiness check endpoint
     Checks if service is ready to handle requests
     """
+    bedrock_client = BedrockClient()
     checks = {
         "api": True,  # API is ready if we reach this point
-        "bedrock": True,  # Would check Bedrock connectivity
-        "database": True,  # Would check database connectivity
+        "bedrock": bedrock_client.client is not None,
+        "dynamodb": dynamodb_client.available,
+        "timestream": timestream_client.available,
     }
     
     all_ready = all(checks.values())

@@ -12,6 +12,7 @@ class TelemetryAgent {
     this.lastPosition = null;
     this.lastVelocity = 0;
     this.mockSpeed = 0; // For simulated speed ramping
+    this.allowMockGPSFallback = false;
     this.sessionId = null; // Phase 3: Session tracking
     this.telemetryBuffer = []; // Phase 3: Buffer for enhanced telemetry
     this.lastPersistTime = 0;
@@ -60,6 +61,12 @@ class TelemetryAgent {
 
     this.isMonitoring = true;
     console.log('📡 Telemetry monitoring started');
+
+    chrome.storage.local.get('allowMockGPSFallback').then((stored) => {
+      this.allowMockGPSFallback = !!stored.allowMockGPSFallback;
+    }).catch(() => {
+      this.allowMockGPSFallback = false;
+    });
 
     // Start network monitoring
     this.monitoringInterval = setInterval(() => {
@@ -235,9 +242,7 @@ class TelemetryAgent {
       }
     );
 
-    // Fallback: Start sending mock data immediately
-    // Real GPS will override if/when it becomes available
-    this.startMockGPSFallback();
+    // Do not start synthetic GPS by default.
   }
 
   /**
@@ -287,8 +292,9 @@ class TelemetryAgent {
       console.warn(`📍 GPS ${errorMessages[error.code] || 'ERROR'}: ${error.message}`);
     }
     
-    // Mock GPS is already running from startGPSTracking, but ensure it's active
-    this.startMockGPSFallback();
+    if (this.allowMockGPSFallback) {
+      this.startMockGPSFallback();
+    }
   }
 
   /**

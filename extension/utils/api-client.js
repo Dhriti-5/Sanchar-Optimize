@@ -23,7 +23,9 @@ const API_CONFIG = {
         SESSION_CREATE: '/session/create',
         SESSION_GET: '/session',
         SESSION_POSITION: '/session',
-        SESSION_TRANSITION: '/session'
+        SESSION_TRANSITION: '/session',
+        SESSION_RESUME_MAP: '/session',
+        CONTENT_SUMMARY: '/content/summary'
     },
     
     // Timeout in milliseconds
@@ -341,6 +343,27 @@ class BackendAPI {
         }
     }
 
+    async mapResumePosition(sessionId, payload) {
+        if (!this.enabled) {
+            return null;
+        }
+
+        try {
+            const response = await this._fetch(
+                `${API_CONFIG.ENDPOINTS.SESSION_RESUME_MAP}/${sessionId}/resume-map`,
+                {
+                    method: 'POST',
+                    body: JSON.stringify(payload)
+                }
+            );
+
+            return response;
+        } catch (error) {
+            console.error('Failed to map resume position:', error);
+            return null;
+        }
+    }
+
     /**
      * Generate a session ID
      */
@@ -351,16 +374,26 @@ class BackendAPI {
     /**
      * Submit batch telemetry to backend
      */
-    async submitTelemetryBatch(deviceId, sessionId, telemetryArray) {
+    async submitTelemetryBatch(deviceIdOrTelemetryArray, sessionId, telemetryArray) {
         if (!this.enabled) {
             return null;
         }
 
         try {
+            let resolvedDeviceId = deviceIdOrTelemetryArray;
+            let resolvedSessionId = sessionId;
+            let resolvedTelemetry = telemetryArray;
+
+            if (Array.isArray(deviceIdOrTelemetryArray) && !sessionId && !telemetryArray) {
+                resolvedTelemetry = deviceIdOrTelemetryArray;
+                resolvedSessionId = (resolvedTelemetry[0] && resolvedTelemetry[0].session_id) || this._generateSessionId();
+                resolvedDeviceId = `device_${resolvedSessionId}`;
+            }
+
             const batch = {
-                device_id: deviceId,
-                session_id: sessionId,
-                telemetry: telemetryArray
+                device_id: resolvedDeviceId,
+                session_id: resolvedSessionId,
+                telemetry: resolvedTelemetry
             };
 
             const response = await this._fetch(API_CONFIG.ENDPOINTS.TELEMETRY_BATCH, {
@@ -379,16 +412,26 @@ class BackendAPI {
     /**
      * Get signal drop prediction from backend
      */
-    async getPrediction(deviceId, sessionId, recentTelemetry) {
+    async getPrediction(deviceIdOrRecentTelemetry, sessionId, recentTelemetry) {
         if (!this.enabled) {
             return null;
         }
 
         try {
+            let resolvedDeviceId = deviceIdOrRecentTelemetry;
+            let resolvedSessionId = sessionId;
+            let resolvedTelemetry = recentTelemetry;
+
+            if (Array.isArray(deviceIdOrRecentTelemetry) && !sessionId && !recentTelemetry) {
+                resolvedTelemetry = deviceIdOrRecentTelemetry;
+                resolvedSessionId = (resolvedTelemetry[0] && resolvedTelemetry[0].session_id) || this._generateSessionId();
+                resolvedDeviceId = `device_${resolvedSessionId}`;
+            }
+
             const request = {
-                device_id: deviceId,
-                session_id: sessionId,
-                recent_telemetry: recentTelemetry
+                device_id: resolvedDeviceId,
+                session_id: resolvedSessionId,
+                recent_telemetry: resolvedTelemetry
             };
 
             const response = await this._fetch(API_CONFIG.ENDPOINTS.PREDICT, {
@@ -407,6 +450,22 @@ class BackendAPI {
             return response;
         } catch (error) {
             console.error('Failed to get prediction:', error);
+            return null;
+        }
+    }
+
+    async requestContentSummary(request) {
+        if (!this.enabled) {
+            return null;
+        }
+
+        try {
+            return await this._fetch(API_CONFIG.ENDPOINTS.CONTENT_SUMMARY, {
+                method: 'POST',
+                body: JSON.stringify(request)
+            });
+        } catch (error) {
+            console.error('Failed to get content summary:', error);
             return null;
         }
     }

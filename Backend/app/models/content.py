@@ -106,6 +106,9 @@ class TransformationRequest(BaseModel):
     # Context
     user_bandwidth_kbps: float = Field(..., description="User's current bandwidth")
     previous_position: Optional[float] = Field(None, description="Where user left off")
+    transcript_hint: Optional[str] = Field(None, description="Optional transcript/caption text extracted from source")
+    visual_context_hint: Optional[str] = Field(None, description="Optional visual context hint from source")
+    key_concepts_hint: List[str] = Field(default_factory=list, description="Optional key concepts extracted from source context")
     
     class Config:
         json_schema_extra = {

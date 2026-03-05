@@ -28,8 +28,12 @@ class BedrockClient:
     
     def __init__(self):
         """Initialize Bedrock client"""
+        self.allow_mock_responses = settings.BEDROCK_ALLOW_MOCK_RESPONSES
         if boto3 is None:
-            logger.warning("boto3 not installed. Bedrock client will use mock responses.")
+            if self.allow_mock_responses:
+                logger.warning("boto3 not installed. Bedrock client will use mock responses (BEDROCK_ALLOW_MOCK_RESPONSES=true).")
+            else:
+                logger.error("boto3 not installed. Bedrock client unavailable and mock responses disabled.")
             self.client = None
         else:
             try:
@@ -68,8 +72,14 @@ class BedrockClient:
             Model response as dictionary
         """
         if self.client is None:
-            logger.warning("Bedrock client not available. Using mock response.")
-            return self._get_mock_response(prompt)
+            if self.allow_mock_responses:
+                logger.warning("Bedrock client not available. Using mock response (BEDROCK_ALLOW_MOCK_RESPONSES=true).")
+                return self._get_mock_response(prompt)
+            return {
+                "success": False,
+                "error": "Bedrock client unavailable and mock responses are disabled",
+                "fallback": True
+            }
         
         try:
             start_time = time.time()
