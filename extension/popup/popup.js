@@ -107,9 +107,13 @@ function updateStatistics(telemetryHistory, cachedSummaries) {
   const summariesCount = Object.keys(cachedSummaries).length;
   document.getElementById('summaries-generated').textContent = summariesCount;
 
-  // Calculate data saved (mock calculation for now)
-  const dataSavedMB = summariesCount * 15; // Assume 15MB saved per summary
-  document.getElementById('data-saved').textContent = `${dataSavedMB} MB`;
+  const summaries = Object.values(cachedSummaries);
+  const avgCompression = summaries.length
+    ? summaries.reduce((acc, item) => acc + (item.compressionRatio || 0.1), 0) / summaries.length
+    : 0.1;
+  const estimatedOriginalMBPerSummary = 15;
+  const dataSavedMB = summariesCount * estimatedOriginalMBPerSummary * Math.max(0, 1 - avgCompression);
+  document.getElementById('data-saved').textContent = `${dataSavedMB.toFixed(1)} MB`;
 
   // Monitoring frequency (derive from telemetry)
   if (telemetryHistory.length >= 2) {

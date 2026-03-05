@@ -12,6 +12,9 @@ class VideoInterceptor {
     this.updateInterval = null;
     this.lastReportedTime = 0;
     this.reloadNotificationShown = false;
+    this.overlayShownAt = null;
+    this.summaryReadSeconds = 0;
+    this.lastSummary = null;
     
     console.log(`🎯 Sanchar-Optimize active on ${this.platform}`);
   }
@@ -187,7 +190,8 @@ class VideoInterceptor {
       ended: this.videoElement.ended,
       playbackRate: this.videoElement.playbackRate,
       volume: this.videoElement.volume,
-      url: window.location.href
+      url: window.location.href,
+      captionsSnippet: this.extractCaptionsSnippet()
     };
 
     // Platform-specific extraction
@@ -236,6 +240,34 @@ class VideoInterceptor {
     // Coursera video IDs are typically in the URL
     const match = window.location.pathname.match(/lecture\/([^/]+)/);
     return match ? match[1] : 'unknown';
+  }
+
+  extractCaptionsSnippet() {
+    try {
+      if (!this.videoElement || !this.videoElement.textTracks) {
+        return null;
+      }
+
+      const snippets = [];
+      for (const track of this.videoElement.textTracks) {
+        const cues = track.activeCues;
+        if (!cues || cues.length === 0) continue;
+        for (let index = 0; index < cues.length; index++) {
+          const cueText = (cues[index].text || '').trim();
+          if (cueText) snippets.push(cueText);
+        }
+      }
+
+      if (snippets.length === 0) {
+        return null;
+      }
+
+      const unique = [...new Set(snippets)];
+      return unique.join(' ').slice(0, 1200);
+    } catch (error) {
+      console.debug('Caption extraction unavailable:', error.message);
+      return null;
+    }
   }
 
   /**
@@ -355,11 +387,20 @@ class VideoInterceptor {
 
     if (!overlay || !summaryContent) return;
 
+    this.lastSummary = summary;
+
     // Populate summary
     summaryContent.innerHTML = `
       <div class="sanchar-summary-text">
         ${summary.summary || 'Generating summary...'}
       </div>
+
+      ${summary.keyFrame?.url ? `
+        <div class="sanchar-visual-section">
+          <h4>🖼️ Key Frame</h4>
+          <img src="${summary.keyFrame.url}" alt="Key educational visual" style="max-width:100%;border-radius:12px;display:block;" />
+        </div>
+      ` : ''}
       
       ${summary.visualDescriptions ? `
         <div class="sanchar-visual-section">
@@ -395,6 +436,9 @@ class VideoInterceptor {
       this.videoElement.pause();
     }
 
+    this.overlayShownAt = Date.now();
+    this.summaryReadSeconds = 0;
+
     console.log('📺 Overlay displayed');
   }
 
@@ -414,13 +458,39 @@ class VideoInterceptor {
    */
   handleResumeVideo() {
     console.log('▶️ User chose to resume video');
-    this.hideOverlay();
-    
-    if (this.videoElement) {
-      this.videoElement.play();
+
+    if (this.overlayShownAt) {
+      this.summaryReadSeconds = Math.max(0, (Date.now() - this.overlayShownAt) / 1000);
     }
-    
-    this.notifyBackground('USER_RESUMED_VIDEO', {});
+
+    const metadata = this.extractMetadata();
+
+    chrome.runtime.sendMessage(
+      {
+        type: 'USER_RESUMED_VIDEO',
+        data: {
+          videoId: metadata.videoId,
+          currentTime: metadata.currentTime,
+          duration: metadata.duration,
+          summaryReadSeconds: this.summaryReadSeconds,
+          summaryAnchorText: this.lastSummary?.summary?.slice(0, 180) || ''
+        },
+        timestamp: Date.now()
+      },
+      (response) => {
+        const mappedTime = response?.result?.mappedTime;
+
+        if (typeof mappedTime === 'number' && this.videoElement) {
+          this.videoElement.currentTime = mappedTime;
+        }
+
+        this.hideOverlay();
+
+        if (this.videoElement) {
+          this.videoElement.play();
+        }
+      }
+    );
   }
 
   /**
@@ -449,6 +519,10 @@ class VideoInterceptor {
 
         case 'SIGNAL_RESTORED':
           this.handleSignalRestored(message.data);
+          break;
+
+        case 'RESUME_AT':
+          this.handleResumeAt(message.data);
           break;
 
         default:
@@ -522,6 +596,13 @@ class VideoInterceptor {
     const statusText = document.querySelector('.sanchar-status-text');
     if (statusText) {
       statusText.textContent = 'Signal Restored - Resume Video?';
+    }
+  }
+
+  handleResumeAt(data) {
+    const mappedTime = data?.mappedTime;
+    if (typeof mappedTime === 'number' && this.videoElement) {
+      this.videoElement.currentTime = mappedTime;
     }
   }
 

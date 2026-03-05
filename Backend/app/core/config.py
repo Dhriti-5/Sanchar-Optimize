@@ -31,6 +31,7 @@ class Settings(BaseSettings):
     BEDROCK_MODEL_ID: str = "anthropic.claude-3-5-sonnet-20240620-v1:0"
     BEDROCK_MAX_TOKENS: int = 4096
     BEDROCK_TEMPERATURE: float = 0.7
+    BEDROCK_ALLOW_MOCK_RESPONSES: bool = False
     
     # Database
     TIMESTREAM_DATABASE: str = "sanchar_optimize"
@@ -55,6 +56,7 @@ class Settings(BaseSettings):
     # Content Transformation
     MAX_SUMMARY_SIZE_RATIO: float = 0.10
     TRANSCRIPT_CACHE_TTL_SECONDS: int = 3600
+    ALLOW_SYNTHETIC_CONTENT_FALLBACK: bool = False
     
     # Rate Limiting
     RATE_LIMIT_PER_MINUTE: int = 60

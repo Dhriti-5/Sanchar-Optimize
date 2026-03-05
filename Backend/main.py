@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from contextlib import asynccontextmanager
 import logging
 
-from app.api import telemetry, modality, health, session
+from app.api import telemetry, modality, health, session, content
 from app.core.config import settings
 from app.core.logging_config import setup_logging
 
@@ -67,6 +67,7 @@ app.add_middleware(
 app.include_router(health.router, prefix="/api/v1", tags=["health"])
 app.include_router(telemetry.router, prefix="/api/v1", tags=["telemetry"])
 app.include_router(modality.router, prefix="/api/v1", tags=["modality"])
+app.include_router(content.router, prefix="/api/v1", tags=["content"])
 app.include_router(session.router, tags=["session"])
 
 

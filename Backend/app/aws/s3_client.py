@@ -141,3 +141,7 @@ class S3Client:
         except ClientError as e:
             logger.error(f"Failed to upload transcript: {e}")
             return None
+
+
+# Singleton client instance
+s3_client = S3Client()

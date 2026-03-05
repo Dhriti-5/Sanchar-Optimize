@@ -14,11 +14,28 @@ from app.models.telemetry_extended import (
     SessionCreate, 
     SessionResponse, 
     ContentPosition, 
-    ModalityTransition
+    ModalityTransition,
+    ResumeSyncRequest,
+    ResumeSyncResponse
 )
 
 logger = logging.getLogger(__name__)
 router = APIRouter(prefix="/api/v1/session", tags=["session"])
+
+
+def calculate_resume_timestamp(
+    source_position: Optional[float],
+    fallback_timestamp: float,
+    summary_read_seconds: float,
+    content_duration_seconds: Optional[float] = None
+) -> float:
+    base_position = source_position if source_position is not None else fallback_timestamp
+    mapped = max(0.0, base_position + max(0.0, summary_read_seconds))
+
+    if content_duration_seconds is not None:
+        mapped = min(mapped, max(0.0, content_duration_seconds))
+
+    return mapped
 
 
 @router.post("/create", response_model=SessionResponse)
@@ -242,4 +259,41 @@ async def get_transitions(session_id: str, limit: int = 50):
         
     except Exception as e:
         logger.error(f"Error getting transitions: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/{session_id}/resume-map", response_model=ResumeSyncResponse)
+async def map_resume_position(session_id: str, request: ResumeSyncRequest):
+    """Map semantic summary progress back to a video timestamp."""
+    try:
+        source_position = None
+        saved = await dynamodb_client.get_content_position(session_id, request.content_id)
+        if saved and isinstance(saved, dict):
+            source_position = saved.get("timestamp")
+
+        mapped_timestamp = calculate_resume_timestamp(
+            source_position=source_position,
+            fallback_timestamp=request.fallback_timestamp,
+            summary_read_seconds=request.summary_read_seconds,
+            content_duration_seconds=request.content_duration_seconds
+        )
+
+        await dynamodb_client.update_content_position(
+            session_id=session_id,
+            content_id=request.content_id,
+            timestamp=mapped_timestamp,
+            modality="video",
+            semantic_context=request.summary_anchor_text
+        )
+
+        return ResumeSyncResponse(
+            status="success",
+            mapped_timestamp=mapped_timestamp,
+            source_position=source_position,
+            applied_offset_seconds=max(0.0, request.summary_read_seconds),
+            semantic_anchor=request.summary_anchor_text,
+            message="Resume position mapped successfully"
+        )
+    except Exception as e:
+        logger.error(f"Error mapping resume position: {e}")
         raise HTTPException(status_code=500, detail=str(e))

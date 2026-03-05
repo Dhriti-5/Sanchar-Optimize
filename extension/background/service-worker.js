@@ -209,6 +209,12 @@ chrome.runtime.onMessage.addListener((message, sender, sendResponse) => {
       respond({ status: 'received' });
       break;
 
+    case 'USER_RESUMED_VIDEO':
+      handleUserResumedVideo(message.data, sender.tab)
+        .then(result => respond({ status: 'success', result }))
+        .catch(error => respond({ status: 'error', error: error.message }));
+      return true;
+
     case 'BUFFERING_DETECTED':
       console.warn('⚠️ Buffering detected - prediction may have missed this event');
       respond({ status: 'received' });
@@ -313,26 +319,42 @@ async function submitTelemetryToBackend(tab) {
   
   try {
     const session = userSessions.get(tab.id) || {};
+    const { deviceId, sessionId } = getSessionIdentifiers(session, tab);
     const gpsData = session.lastGPS || {};
     
     // Convert recent telemetry to backend format
     const recentTelemetry = telemetryHistory.slice(-10).map(t => ({
+      device_id: deviceId,
+      session_id: sessionId,
       timestamp: t.timestamp / 1000, // Convert to seconds
-      signal_strength_dbm: estimateSignalStrength(t.downlink),
+      signal_strength: normalizeSignalStrength(t.downlink),
       bandwidth_kbps: (t.downlink || 0) * 1000, // Mbps to Kbps
       latency_ms: t.rtt || 0,
       packet_loss_percent: estimatePacketLoss(t.effectiveType),
-      effective_type: t.effectiveType,
-      gps_latitude: gpsData.latitude || 0,
-      gps_longitude: gpsData.longitude || 0,
-      gps_velocity_kmh: gpsData.velocity || 0
+      gps_velocity_kmh: gpsData.velocity || 0,
+      content_id: session.videoId || null,
+      content_position: session.currentTime || 0,
+      effective_type: t.effectiveType
     }));
     
-    await backendAPI.submitTelemetryBatch(recentTelemetry);
+    await backendAPI.submitTelemetryBatch(deviceId, sessionId, recentTelemetry);
     console.log('📊 Batch telemetry submitted to backend');
   } catch (error) {
     console.warn('⚠️ Failed to submit telemetry:', error.message);
   }
+}
+
+function getSessionIdentifiers(session, tab) {
+  const sessionId = session?.session_id || `session_tab_${tab.id}`;
+  return {
+    sessionId,
+    deviceId: `device_${sessionId}`
+  };
+}
+
+function normalizeSignalStrength(downlinkMbps) {
+  if (!downlinkMbps || downlinkMbps <= 0) return 0;
+  return Math.max(0, Math.min(1, downlinkMbps / 10));
 }
 
 // Helper: Estimate signal strength from bandwidth
@@ -419,35 +441,39 @@ async function predictSignalDrop(currentTelemetry, tab) {
   if (isBackendAvailable && backendAPI) {
     try {
       const session = userSessions.get(tab.id) || {};
+      const { deviceId, sessionId } = getSessionIdentifiers(session, tab);
       const gpsData = session.lastGPS || {};
       
       // Convert recent telemetry for backend
       const recentTelemetry = telemetryHistory.slice(-20).map(t => ({
+        device_id: deviceId,
+        session_id: sessionId,
         timestamp: t.timestamp / 1000,
-        signal_strength_dbm: estimateSignalStrength(t.downlink),
+        signal_strength: normalizeSignalStrength(t.downlink),
         bandwidth_kbps: (t.downlink || 0) * 1000,
         latency_ms: t.rtt || 0,
         packet_loss_percent: estimatePacketLoss(t.effectiveType),
-        effective_type: t.effectiveType,
-        gps_latitude: gpsData.latitude || 0,
-        gps_longitude: gpsData.longitude || 0,
-        gps_velocity_kmh: gpsData.velocity || 0
+        gps_velocity_kmh: gpsData.velocity || 0,
+        content_id: session.videoId || null,
+        content_position: session.currentTime || 0,
+        effective_type: t.effectiveType
       }));
       
-      const prediction = await backendAPI.getPrediction(recentTelemetry);
+      const predictionResponse = await backendAPI.getPrediction(deviceId, sessionId, recentTelemetry);
+      const prediction = predictionResponse?.prediction;
       
-      if (prediction.will_drop) {
-        console.warn(`🔮 Backend prediction: Signal drop in ${prediction.time_to_drop_sec}s (confidence: ${(prediction.confidence * 100).toFixed(0)}%)`);
+      if (predictionResponse?.should_prepare_transition && prediction) {
+        console.warn(`🔮 Backend prediction: Signal drop in ${prediction.predicted_time_seconds}s (confidence: ${(prediction.confidence * 100).toFixed(0)}%)`);
       }
       
       return {
-        dropPredicted: prediction.will_drop,
-        confidence: prediction.confidence,
-        horizonSeconds: prediction.time_to_drop_sec || 5,
+        dropPredicted: !!predictionResponse?.should_prepare_transition,
+        confidence: prediction?.confidence || 0,
+        horizonSeconds: prediction?.predicted_time_seconds || 5,
         reasoning: {
-          model: prediction.model_used,
-          predictedSignal: prediction.predicted_signal_strength_dbm,
-          recommendedAction: prediction.recommended_action
+          model: prediction?.predictor_type || 'unknown',
+          predictedBandwidth: prediction?.predicted_bandwidth_kbps,
+          recommendedAction: predictionResponse?.recommended_action
         }
       };
     } catch (error) {
@@ -569,16 +595,81 @@ async function handleSummaryRequest(data, tab) {
     return cached;
   }
   
-  // Request from backend (Phase 2 integration point)
-  console.log('🌐 Requesting summary from backend...');
-  
-  // For Phase 1, return mock summary
-  const mockSummary = generateMockSummary(videoId, currentTime);
-  
-  // Cache it
-  await cacheSummary(cacheKey, mockSummary);
-  
-  return mockSummary;
+  if (isBackendAvailable && backendAPI) {
+    console.log('🌐 Requesting summary from backend...');
+    const session = tab?.id ? (userSessions.get(tab.id) || {}) : {};
+    const recent = telemetryHistory[telemetryHistory.length - 1] || {};
+
+    const backendSummary = await backendAPI.requestContentSummary({
+      video_id: videoId,
+      platform: platform || 'web',
+      current_time: currentTime || 0,
+      duration: data?.duration || session?.duration || null,
+      title: data?.title || session?.title || '',
+      url: data?.url || session?.url || '',
+      bandwidth_kbps: (recent.downlink || 0.8) * 1000,
+      transcript_hint: data?.captionsSnippet || null,
+      visual_context_hint: data?.title || session?.title || null,
+      key_concepts_hint: data?.keyConcepts || []
+    });
+
+    if (backendSummary) {
+      await cacheSummary(cacheKey, backendSummary);
+      return backendSummary;
+    }
+  }
+
+  const fallbackSummary = generateMockSummary(videoId, currentTime);
+  await cacheSummary(cacheKey, fallbackSummary);
+  return fallbackSummary;
+}
+
+async function handleUserResumedVideo(data, tab) {
+  const {
+    videoId,
+    currentTime,
+    summaryReadSeconds,
+    summaryAnchorText,
+    duration
+  } = data || {};
+
+  const session = tab?.id ? (userSessions.get(tab.id) || {}) : {};
+  const sessionId = session.session_id;
+  const contentId = videoId || session.videoId || 'unknown_content';
+
+  let mappedTimestamp = (currentTime || 0) + (summaryReadSeconds || 0);
+
+  if (isBackendAvailable && backendAPI && sessionId) {
+    const mapped = await backendAPI.mapResumePosition(sessionId, {
+      content_id: contentId,
+      fallback_timestamp: currentTime || 0,
+      summary_read_seconds: summaryReadSeconds || 0,
+      summary_anchor_text: summaryAnchorText || null,
+      content_duration_seconds: duration || null
+    });
+
+    if (mapped && typeof mapped.mapped_timestamp === 'number') {
+      mappedTimestamp = mapped.mapped_timestamp;
+    }
+  }
+
+  if (duration && mappedTimestamp > duration) {
+    mappedTimestamp = duration;
+  }
+
+  if (tab && tab.id) {
+    chrome.tabs.sendMessage(tab.id, {
+      type: 'RESUME_AT',
+      data: {
+        mappedTime: mappedTimestamp
+      }
+    }).catch(() => {});
+  }
+
+  return {
+    mappedTime: mappedTimestamp,
+    source: isBackendAvailable ? 'backend' : 'local'
+  };
 }
 
 async function preloadSummary(videoId, platform, currentTime) {
@@ -663,8 +754,13 @@ function generateMockSummary(videoId, currentTime) {
     visualDescriptions: [
       'The instructor demonstrates a concept on the whiteboard'
     ],
+    keyFrame: {
+      url: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?w=640&auto=format&fit=crop',
+      format: 'webp',
+      timestamp: currentTime
+    },
     compressionRatio: 0.08, // 8% of original size
-    generatedBy: 'Mock Generator (Phase 1)',
+    generatedBy: 'Fallback Generator (backend unavailable)',
     generatedAt: Date.now()
   };
 }
