@@ -44,12 +44,18 @@ class BedrockClient:
             self.client = None
         else:
             try:
-                self.client = boto3.client(
-                    'bedrock-runtime',
-                    region_name=settings.AWS_REGION,
-                    aws_access_key_id=settings.AWS_ACCESS_KEY_ID if settings.AWS_ACCESS_KEY_ID else None,
-                    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY if settings.AWS_SECRET_ACCESS_KEY else None
-                )
+                # In Lambda, use IAM role credentials automatically
+                import os
+                is_lambda = os.environ.get('AWS_LAMBDA_FUNCTION_NAME') is not None
+                
+                client_kwargs = {'region_name': settings.AWS_REGION}
+                
+                # Only use explicit credentials if not in Lambda and they are set
+                if not is_lambda and settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+                    client_kwargs['aws_access_key_id'] = settings.AWS_ACCESS_KEY_ID
+                    client_kwargs['aws_secret_access_key'] = settings.AWS_SECRET_ACCESS_KEY
+                
+                self.client = boto3.client('bedrock-runtime', **client_kwargs)
                 logger.info(f"Bedrock client initialized for region {settings.AWS_REGION}")
             except Exception as e:
                 logger.error(f"Failed to initialize Bedrock client: {e}")

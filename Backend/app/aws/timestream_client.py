@@ -33,12 +33,18 @@ class TimestreamClient:
         
         try:
             # Initialize DynamoDB client
-            self.dynamodb = boto3.resource(
-                'dynamodb',
-                region_name=settings.AWS_REGION,
-                aws_access_key_id=settings.AWS_ACCESS_KEY_ID if settings.AWS_ACCESS_KEY_ID else None,
-                aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY if settings.AWS_SECRET_ACCESS_KEY else None
-            )
+            # In Lambda, use IAM role credentials automatically
+            import os
+            is_lambda = os.environ.get('AWS_LAMBDA_FUNCTION_NAME') is not None
+            
+            client_kwargs = {'region_name': settings.AWS_REGION}
+            
+            # Only use explicit credentials if not in Lambda and they are set
+            if not is_lambda and settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+                client_kwargs['aws_access_key_id'] = settings.AWS_ACCESS_KEY_ID
+                client_kwargs['aws_secret_access_key'] = settings.AWS_SECRET_ACCESS_KEY
+            
+            self.dynamodb = boto3.resource('dynamodb', **client_kwargs)
             
             # Test connection
             self.table = self.dynamodb.Table(self.table_name)
@@ -47,13 +53,13 @@ class TimestreamClient:
             self.available = True
             logger.info(f"Telemetry DynamoDB client initialized: {self.table_name}")
         except ClientError as e:
-            if e.response['Error']['Code'] == 'ResourceNotFoundException':
-                logger.warning(f"Telemetry table not found: {self.table_name}. Run setup script to create it.")
+            if e.response['Error']['Code'] in ['ResourceNotFoundException', 'AccessDeniedException']:
+                logger.debug(f"Telemetry table not available: {self.table_name}. Telemetry features disabled.")
             else:
-                logger.error(f"Failed to initialize telemetry client: {e}")
+                logger.warning(f"Could not initialize telemetry client: {e}")
             self.available = False
         except Exception as e:
-            logger.error(f"Failed to initialize telemetry client: {e}")
+            logger.debug(f"Telemetry client not available: {e}")
             self.available = False
     
     def _anonymize_location(self, latitude: float, longitude: float) -> tuple:

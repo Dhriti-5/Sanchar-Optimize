@@ -29,12 +29,17 @@ class DynamoDBClient:
         
         try:
             # Initialize client and resource
+            # In Lambda, use IAM role credentials automatically (don't pass explicit credentials)
+            import os
+            is_lambda = os.environ.get('AWS_LAMBDA_FUNCTION_NAME') is not None
+            
             session_kwargs = {
                 'region_name': settings.AWS_REGION
             }
-            if settings.AWS_ACCESS_KEY_ID:
+            
+            # Only use explicit credentials if not in Lambda and they are set
+            if not is_lambda and settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
                 session_kwargs['aws_access_key_id'] = settings.AWS_ACCESS_KEY_ID
-            if settings.AWS_SECRET_ACCESS_KEY:
                 session_kwargs['aws_secret_access_key'] = settings.AWS_SECRET_ACCESS_KEY
             
             self.client = boto3.client('dynamodb', **session_kwargs)

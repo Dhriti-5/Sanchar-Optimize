@@ -30,12 +30,18 @@ class S3Client:
             self.bucket_name = None
         else:
             try:
-                self.client = boto3.client(
-                    's3',
-                    region_name=settings.AWS_REGION,
-                    aws_access_key_id=settings.AWS_ACCESS_KEY_ID if settings.AWS_ACCESS_KEY_ID else None,
-                    aws_secret_access_key=settings.AWS_SECRET_ACCESS_KEY if settings.AWS_SECRET_ACCESS_KEY else None
-                )
+                # In Lambda, use IAM role credentials automatically
+                import os
+                is_lambda = os.environ.get('AWS_LAMBDA_FUNCTION_NAME') is not None
+                
+                client_kwargs = {'region_name': settings.AWS_REGION}
+                
+                # Only use explicit credentials if not in Lambda and they are set
+                if not is_lambda and settings.AWS_ACCESS_KEY_ID and settings.AWS_SECRET_ACCESS_KEY:
+                    client_kwargs['aws_access_key_id'] = settings.AWS_ACCESS_KEY_ID
+                    client_kwargs['aws_secret_access_key'] = settings.AWS_SECRET_ACCESS_KEY
+                
+                self.client = boto3.client('s3', **client_kwargs)
                 self.bucket_name = settings.S3_BUCKET_NAME
                 logger.info(f"S3 client initialized for bucket {self.bucket_name}")
             except Exception as e:
