@@ -73,11 +73,82 @@ class TelemetryAgent {
       this.collectNetworkTelemetry();
     }, intervalMs);
 
+    // Listen for immediate network changes
+    this.setupNetworkEventListeners();
+
     // Start GPS monitoring
     this.startGPSTracking();
 
     // Initial collection
     this.collectNetworkTelemetry();
+    
+    // CRITICAL: Check network status immediately on load
+    // This catches WiFi-off state that occurred before page loaded
+    setTimeout(() => {
+      console.log('🔍 Initial network check on page load...');
+      this.triggerOverlayCheck();
+    }, 1000); // Give the page 1 second to fully load
+  }
+
+  /**
+   * Setup event listeners for immediate network change detection
+   */
+  setupNetworkEventListeners() {
+    // Listen for online/offline events
+    window.addEventListener('online', () => {
+      console.log('✅ Browser is now ONLINE');
+      this.collectNetworkTelemetry();
+      this.sendToBackground('NETWORK_STATE_CHANGE', { online: true });
+      // Trigger overlay check - might hide overlay if network is good
+      this.triggerOverlayCheck();
+    });
+
+    window.addEventListener('offline', () => {
+      console.warn('🔴 Browser is now OFFLINE - WiFi/Network disconnected');
+      this.collectNetworkTelemetry();
+      this.sendToBackground('NETWORK_STATE_CHANGE', { online: false });
+      // CRITICAL: Force overlay check immediately when WiFi is turned off
+      console.log('⚡ Forcing overlay check due to offline event...');
+      this.triggerOverlayCheck();
+    });
+
+    // Listen for connection changes (3G, 4G, etc.)
+    const connection = navigator.connection || navigator.mozConnection || navigator.webkitConnection;
+    if (connection) {
+      connection.addEventListener('change', () => {
+        console.log('🔄 Network connection changed:', connection.effectiveType);
+        this.collectNetworkTelemetry();
+        this.sendToBackground('NETWORK_STATE_CHANGE', { 
+          effectiveType: connection.effectiveType,
+          downlink: connection.downlink 
+        });
+        // Check if we need to show overlay
+        this.triggerOverlayCheck();
+      });
+    }
+  }
+
+  /**
+   * Trigger overlay check for network degradation
+   */
+  triggerOverlayCheck() {
+    const isDegraded = this.isNetworkDegraded();
+    const status = this.getCurrentNetworkStatus();
+    
+    console.log('🔍 Network check triggered:', {
+      degraded: isDegraded,
+      online: status.online,
+      effectiveType: status.effectiveType,
+      downlink: status.downlink
+    });
+    
+    // Dispatch custom event that content script can listen to
+    window.dispatchEvent(new CustomEvent('sanchar-check-network', {
+      detail: { 
+        degraded: isDegraded,
+        status: status
+      }
+    }));
   }
 
   /**
@@ -455,13 +526,14 @@ class TelemetryAgent {
     
     // Consider network degraded if:
     // - Offline
-    // - Effective type is 2g or slow-2g
-    // - Downlink < 0.5 Mbps
+    // - Effective type is 3g, 2g or slow-2g
+    // - Downlink < 1.5 Mbps (typical threshold for video buffering)
     
     return !status.online || 
+           status.effectiveType === '3g' ||
            status.effectiveType === '2g' || 
            status.effectiveType === 'slow-2g' ||
-           status.downlink < 0.5;
+           status.downlink < 1.5;
   }
 }
 

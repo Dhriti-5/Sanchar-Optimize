@@ -163,13 +163,17 @@ write_info "Running SAM build..."
 if [ "$DRY_RUN" = "true" ]; then
     sam build --template "$LAMBDA_DIR/template-complete.yaml" --debug --use-container
 else
-    sam build --template "$LAMBDA_DIR/template-complete.yaml" --use-container 2>&1 | tee build.log
+    sam build --template "$LAMBDA_DIR/template-complete.yaml" --use-container 2>&1 | tee "$PROJECT_DIR/build.log"
 fi
 
 if [ ${PIPESTATUS[0]} -eq 0 ]; then
     write_success "SAM build completed"
 else
-    write_error "SAM build failed. Check build.log"
+    write_error "SAM build failed. Check build.log for details"
+    write_info "Common issues:"
+    write_info "  - Missing Python dependencies: pip install -r requirements.txt"
+    write_info "  - Invalid template syntax: sam validate --lint"
+    write_error "Build log saved to: $PROJECT_DIR/build.log"
     exit 1
 fi
 
@@ -214,12 +218,27 @@ if [ "$SKIP_DEPLOY" != "true" ]; then
             --region "$AWS_REGION" \
             --parameter-overrides EnvironmentName="$ENVIRONMENT" AllowMockResponses=false \
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM \
-            --no-fail-on-empty-changeset 2>&1 | tee deploy.log
+            --no-fail-on-empty-changeset 2>&1 | tee "$PROJECT_DIR/deploy.log"
         
         if [ ${PIPESTATUS[0]} -eq 0 ]; then
             write_success "CloudFormation deployment completed"
         else
-            write_error "CloudFormation deployment failed. Check deploy.log"
+            write_error "CloudFormation deployment failed"
+            echo ""
+            write_info "Troubleshooting steps:"
+            write_info "1. Check deploy.log in: $PROJECT_DIR/deploy.log"
+            write_info "2. View CloudFormation events:"
+            echo "   aws cloudformation describe-stack-events --stack-name $STACK_NAME --region $AWS_REGION --max-items 20"
+            write_info "3. Validate template:"
+            echo "   sam validate --template $LAMBDA_DIR/template-complete.yaml --lint"
+            write_info "4. Check CloudFormation console:"
+            echo "   https://console.aws.amazon.com/cloudformation/home?region=$AWS_REGION"
+            echo ""
+            write_info "Common deployment errors:"
+            write_info "  - IAM permissions: Ensure deploying user has CloudFormation, Lambda, API Gateway, S3, DynamoDB, Timestream permissions"
+            write_info "  - Resource limits: Check AWS service quotas"
+            write_info "  - Invalid parameters: Review template parameter values"
+            write_info "  - Bedrock access: Ensure Bedrock is enabled in your account"
             exit 1
         fi
     fi

@@ -77,8 +77,6 @@ Resources:
       MethodSettings:
         - ResourcePath: '/*'
           HttpMethod: '*'
-          LoggingLevel: INFO
-          DataTraceEnabled: true
           MetricsEnabled: true
           ThrottlingBurstLimit: 5000
           ThrottlingRateLimit: 2000
@@ -87,15 +85,7 @@ Resources:
         AllowHeaders: "'Content-Type, Authorization, X-Amz-Date, X-Api-Key'"
         AllowOrigin: "'*'"
       Auth:
-        DefaultAuthorizer: ApiKeyAuthorizer
         ApiKeyRequired: false
-
-  ApiKeyAuthorizer:
-    Type: AWS::ApiGateway::ApiKey
-    Properties:
-      Name: !Sub 'sanchar-optimize-key-${EnvironmentName}'
-      Description: API key for Sanchar-Optimize backend
-      Enabled: true
 
 
   # ============================================================================
@@ -111,49 +101,26 @@ Resources:
       Description: FastAPI backend for Sanchar-Optimize
       Timeout: 60
       MemorySize: 1024
-      ReservedConcurrentExecutions: 100
-      Architectures:
-        - x86_64
       EphemeralStorage:
         Size: 2048
       Environment:
         Variables:
           S3_BUCKET: !Ref ContentBucket
           DYNAMODB_TABLE: !Ref SessionStateTable
-          TIMESTREAM_DATABASE: !Ref TimestreamDatabase
-          TIMESTREAM_TABLE: !Ref TimestreamTable
           BEDROCK_MODEL_ID: 'anthropic.claude-3-5-sonnet-20240620-v1:0'
       Policies:
         - AWSLambdaBasicExecutionRole
-        - CloudWatchPutMetricAlarmPolicy: {}
+        - S3ReadPolicy:
+            BucketName: !Ref ContentBucket
+        - DynamoDBCrudPolicy:
+            TableName: !Ref SessionStateTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ContentCacheTable
         - Statement:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
-              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::1:foundation-model/*'
-            - Effect: Allow
-              Action:
-                - s3:GetObject
-                - s3:PutObject
-                - s3:ListBucket
-              Resource:
-                - !GetAtt ContentBucket.Arn
-                - !Sub '${ContentBucket.Arn}/*'
-            - Effect: Allow
-              Action:
-                - dynamodb:GetItem
-                - dynamodb:PutItem
-                - dynamodb:UpdateItem
-                - dynamodb:Query
-                - dynamodb:Scan
-              Resource:
-                - !GetAtt SessionStateTable.Arn
-                - !Sub '${SessionStateTable.Arn}/index/*'
-            - Effect: Allow
-              Action:
-                - timestream:WriteRecords
-                - timestream:DescribeTable
-              Resource: !Sub 'arn:aws:timestream:${AWS::Region}:${AWS::AccountId}:database/${TimestreamDatabase}/table/${TimestreamTable}'
+              Resource: '*'
       Events:
         ApiEvent:
           Type: Api
@@ -173,19 +140,16 @@ Resources:
       FunctionName: !Sub 'sanchar-optimize-network-sentry-${EnvironmentName}'
       CodeUri: ../../
       Handler: app.lambda_handlers.network_sentry.handler
-      ReservedConcurrentExecutions: 50
       Description: Network Sentry Agent for signal drop prediction
       Environment:
         Variables:
-          TIMESTREAM_DATABASE: !Ref TimestreamDatabase
-          TIMESTREAM_TABLE: !Ref TimestreamTable
+          DYNAMODB_TABLE: !Ref SessionStateTable
       Policies:
         - AWSLambdaBasicExecutionRole
-        - Statement:
-            - Effect: Allow
-              Action:
-                - timestream:WriteRecords
-              Resource: !Sub 'arn:aws:timestream:${AWS::Region}:${AWS::AccountId}:database/${TimestreamDatabase}/table/${TimestreamTable}'
+        - DynamoDBReadPolicy:
+            TableName: !Ref SessionStateTable
+        - DynamoDBReadPolicy:
+            TableName: !Ref ContentCacheTable
       Events:
         ScheduledInvoke:
           Type: Schedule
@@ -203,7 +167,6 @@ Resources:
       FunctionName: !Sub 'sanchar-optimize-modality-orchestrator-${EnvironmentName}'
       CodeUri: ../../
       Handler: app.lambda_handlers.modality_orchestrator.handler
-      ReservedConcurrentExecutions: 50
       Timeout: 10
       MemorySize: 512
       Description: Modality Orchestrator for AI-powered decisions
@@ -213,16 +176,13 @@ Resources:
           DYNAMODB_TABLE: !Ref SessionStateTable
       Policies:
         - AWSLambdaBasicExecutionRole
+        - DynamoDBReadPolicy:
+            TableName: !Ref SessionStateTable
         - Statement:
             - Effect: Allow
               Action:
-                - bedrock:InvokeModel
-              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::1:foundation-model/*'
-            - Effect: Allow
-              Action:
-                - dynamodb:GetItem
-                - dynamodb:UpdateItem
-              Resource: !GetAtt SessionStateTable.Arn
+                - bedrock:InvokeModel 
+              Resource: '*'
 
 
   # ============================================================================
@@ -235,7 +195,6 @@ Resources:
       FunctionName: !Sub 'sanchar-optimize-transformer-${EnvironmentName}'
       CodeUri: ../../
       Handler: app.lambda_handlers.transformer.handler
-      ReservedConcurrentExecutions: 20
       Timeout: 30
       MemorySize: 1024
       EphemeralStorage:
@@ -247,16 +206,13 @@ Resources:
           BEDROCK_MODEL_ID: 'anthropic.claude-3-5-sonnet-20240620-v1:0'
       Policies:
         - AWSLambdaBasicExecutionRole
+        - S3ReadPolicy:
+            BucketName: !Ref ContentBucket
         - Statement:
             - Effect: Allow
               Action:
                 - bedrock:InvokeModel
-              Resource: !Sub 'arn:aws:bedrock:${AWS::Region}::1:foundation-model/*'
-            - Effect: Allow
-              Action:
-                - s3:GetObject
-                - s3:PutObject
-              Resource: !Sub '${ContentBucket.Arn}/*'
+              Resource: '*'
 
 
   # ============================================================================
@@ -267,7 +223,7 @@ Resources:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmName: !Sub 'sanchar-optimize-backend-errors-${EnvironmentName}'
-      DisplayName: Backend Function Error Rate
+      AlarmDescription: Backend Function Error Rate
       MetricName: Errors
       Namespace: AWS/Lambda
       Statistic: Sum
@@ -284,7 +240,7 @@ Resources:
     Type: AWS::CloudWatch::Alarm
     Properties:
       AlarmName: !Sub 'sanchar-optimize-backend-throttles-${EnvironmentName}'
-      DisplayName: Backend Function Throttles
+      AlarmDescription: Backend Function Throttles
       MetricName: Throttles
       Namespace: AWS/Lambda
       Statistic: Sum
@@ -299,27 +255,10 @@ Resources:
 
 
   # ============================================================================
-  # Data Storage: Timestream (Time-Series Telemetry)
+  # Data Storage: DynamoDB (Session State & Telemetry)
   # ============================================================================
-
-  TimestreamDatabase:
-    Type: AWS::Timestream::Database
-    Properties:
-      DatabaseName: !Sub 'sanchar-optimize-db-${EnvironmentName}'
-
-  TimestreamTable:
-    Type: AWS::Timestream::Table
-    Properties:
-      DatabaseName: !Ref TimestreamDatabase
-      TableName: network-telemetry
-      RetentionProperties:
-        MemoryStoreRetentionPeriodInHours: 24
-        MagneticStoreRetentionPeriodInDays: 30
-
-
-  # ============================================================================
-  # Data Storage: DynamoDB (Session State)
-  # ============================================================================
+  # Note: Telemetry data is stored in DynamoDB instead of Timestream to avoid
+  # special access requirements. See app/aws/timestream_client.py for implementation.
 
   SessionStateTable:
     Type: AWS::DynamoDB::Table
@@ -524,12 +463,6 @@ Outputs:
       Name: !Sub '${EnvironmentName}-TransformerArn'
 
   # Data Storage
-  TimestreamDatabaseName:
-    Description: Timestream Database Name
-    Value: !Ref TimestreamDatabase
-    Export:
-      Name: !Sub '${EnvironmentName}-TimestreamDatabase'
-
   SessionStateTableName:
     Description: DynamoDB Session State Table Name
     Value: !Ref SessionStateTable

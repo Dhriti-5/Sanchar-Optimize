@@ -85,7 +85,7 @@ class ModalityDecisionResponse(BaseModel):
     decision_confidence: float = Field(..., ge=0.0, le=1.0, description="Confidence in decision")
     
     # Metadata
-    model_used: str = Field(default="bedrock-claude-3.5-sonnet")
+    ai_model_used: str = Field(default="bedrock-claude-3.5-sonnet")
     processing_time_ms: Optional[int] = Field(None)
     
     class Config:
@@ -98,7 +98,7 @@ class ModalityDecisionResponse(BaseModel):
                 "reasoning": "Bandwidth dropping to 800 Kbps. Content can be understood in audio format. Wait 2s to complete current sentence.",
                 "fallback_strategy": "If audio fails, transition to TEXT_SUMMARY",
                 "decision_confidence": 0.88,
-                "model_used": "bedrock-claude-3.5-sonnet",
+                "ai_model_used": "bedrock-claude-3.5-sonnet",
                 "processing_time_ms": 450
             }
         }

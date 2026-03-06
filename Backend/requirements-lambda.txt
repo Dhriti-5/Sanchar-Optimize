@@ -1,0 +1,28 @@
+# Lambda-specific requirements - minimal for production deployment
+# Excludes dev/test dependencies and uses Lambda-compatible versions
+
+# Core Framework
+fastapi==0.109.0
+pydantic==2.5.3
+pydantic-settings==2.1.0
+mangum==0.17.0  # ASGI adapter for AWS Lambda
+
+# AWS Services
+boto3==1.34.34
+
+# ML & Data Processing (Lambda-compatible versions)
+numpy>=1.24.0,<2.0.0  # Pin to 1.x for Lambda container compatibility
+pandas==2.2.0
+scikit-learn==1.4.0
+tensorflow==2.15.0  # For LSTM model
+
+# HTTP & Networking
+httpx==0.26.0
+aiohttp==3.9.3
+
+# Utilities
+python-dotenv==1.0.1
+python-multipart==0.0.6
+
+# Monitoring & Logging
+loguru==0.7.2

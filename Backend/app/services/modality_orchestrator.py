@@ -95,7 +95,7 @@ class ModalityOrchestrator:
                 reasoning=decision_data.get("reasoning", "AI decision reasoning"),
                 fallback_strategy=decision_data.get("fallback_strategy"),
                 decision_confidence=decision_data.get("decision_confidence", 0.8),
-                model_used=decision_data.get("model_used", "bedrock-claude-3.5-sonnet"),
+                ai_model_used=decision_data.get("ai_model_used", "bedrock-claude-3.5-sonnet"),
                 processing_time_ms=decision_data.get("processing_time_ms", processing_time_ms)
             )
             

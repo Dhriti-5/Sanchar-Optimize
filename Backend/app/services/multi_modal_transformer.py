@@ -1,6 +1,6 @@
 """
 Multi-Modal Transformer Service
-RAG-based pipeline for intelligent content summarization
+RAG-based pipeline for intelligent content summarization with YouTube support
 """
 
 import logging
@@ -17,6 +17,7 @@ from app.models.content import (
     TranscriptCache
 )
 from app.aws.bedrock_client import BedrockClient
+from app.services.youtube_transcript_service import YouTubeTranscriptService
 from app.core.config import settings
 
 logger = logging.getLogger(__name__)
@@ -42,12 +43,13 @@ class MultiModalTransformer:
             bedrock_client: Bedrock client instance (optional)
         """
         self.bedrock_client = bedrock_client or BedrockClient()
+        self.youtube_service = YouTubeTranscriptService()
         
         # In-memory caches (in production, use Redis/S3)
         self.transcript_cache: Dict[str, TranscriptCache] = {}
         self.summary_cache: Dict[str, Summary] = {}
         
-        logger.info("Multi-Modal Transformer initialized")
+        logger.info("Multi-Modal Transformer initialized with YouTube support")
     
     async def transform_content(
         self,
@@ -175,9 +177,10 @@ class MultiModalTransformer:
     ) -> str:
         """
         Extract video transcript for specified time range
+        utomatically detects YouTube videos and fetches real transcripts
         
         Args:
-            content_id: Content identifier
+            content_id: Content identifier (e.g., "youtube_dQw4w9WgXcQ")
             start_time: Segment start time (seconds)
             end_time: Segment end time (seconds)
             
@@ -191,16 +194,60 @@ class MultiModalTransformer:
             
             if age < cached.ttl_seconds:
                 # Extract segment from full transcript
-                # In production, this would use timestamp data
                 logger.debug(f"Using cached transcript for {content_id}")
+                
+                # If we have YouTube segments, use them for precise extraction
+                if hasattr(cached, 'youtube_segments') and cached.youtube_segments:
+                    text = self.youtube_service.extract_segment_text(
+                        cached.youtube_segments,
+                        start_time,
+                        end_time
+                    )
+                    if text:
+                        return text
+                
                 return self._extract_segment_from_transcript(
                     cached.transcript,
                     start_time,
                     end_time
                 )
         
+        # Try to fetch from YouTube if it's a YouTube video
+        if content_id.startswith("youtube_") or content_id.startswith("web_"):
+            video_id = content_id.replace("youtube_", "").replace("web_", "")
+            
+            if self.youtube_service.available:
+                logger.info(f"🎬 Fetching FULL YouTube transcript for video ID: {video_id}")
+                segments, metadata = await self.youtube_service.get_transcript(video_id)
+                
+                if segments and not metadata.get("error"):
+                    # Cache the full transcript and segments
+                    full_text = " ".join(seg.text for seg in segments)
+                    cache_entry = TranscriptCache(
+                        content_id=content_id,
+                        transcript=full_text,
+                        timestamps=[seg.start for seg in segments],
+                        ttl_seconds=settings.TRANSCRIPT_CACHE_TTL_SECONDS
+                    )
+                    # Add segments for precise extraction
+                    cache_entry.youtube_segments = segments
+                    self.transcript_cache[content_id] = cache_entry
+                    
+                    # Extract segment
+                    segment_text = self.youtube_service.extract_segment_text(
+                        segments,
+                        start_time,
+                        end_time
+                    )
+                    
+                    logger.info(f"✅ YouTube transcript extracted: {len(segment_text)} chars from {start_time:.1f}s-{end_time:.1f}s")
+                    logger.info(f"   First 200 chars: {segment_text[:200]}...")
+                    return segment_text
+                else:
+                    logger.warning(f"Failed to fetch YouTube transcript: {metadata.get('error')}")
+        
         if settings.ALLOW_SYNTHETIC_CONTENT_FALLBACK:
-            logger.warning(f"No cached transcript for {content_id}. Using synthetic fallback transcript.")
+            logger.warning(f"No transcript available for {content_id}. Using synthetic fallback transcript.")
             synthetic_transcript = (
                 f"[Synthetic fallback transcript for {content_id} "
                 f"between {start_time:.1f}s and {end_time:.1f}s]"
@@ -276,16 +323,31 @@ class MultiModalTransformer:
         # Build RAG prompt
         prompt = self._build_rag_prompt(segment, request)
         
-        system_prompt = """You are an expert educational content summarizer. Your role is to create concise, accurate summaries of educational video content that preserve all critical learning concepts while dramatically reducing size.
+        system_prompt = """You are an expert educational content analyst and teacher. Your role is to transform video learning content into comprehensive written summaries that preserve full educational value.
 
-Guidelines:
-1. Extract and explain all key concepts
-2. Preserve essential definitions, formulas, and examples
-3. Maintain logical flow and structure
-4. Use clear, educational language
-5. Be concise but complete
+Your summaries are used by students in rural India who lost internet connectivity while learning. They depend on your summaries to continue their education without the video.
 
-Respond with valid JSON only."""
+Core Principles:
+1. **REWRITE AND EXPLAIN** - Transform raw transcript into clear, well-structured educational content
+2. **DON'T JUST REPEAT** - Improve grammar, add clarity, connect ideas logically  
+3. **EXPLAIN CONCEPTS DEEPLY** - Define terms, give context, include reasoning and implications
+4. **ADD EDUCATIONAL VALUE** - Provide examples, clarify difficult points, highlight key takeaways
+5. **STRUCTURE CLEARLY** - Use proper paragraphs with topic sentences and logical flow
+6. **DESCRIBE VISUALS** - If transcript mentions "as you can see" or "this diagram", explain what was likely shown
+7. **BE COMPREHENSIVE** - 250-450 words for thorough coverage
+
+BAD (just repeating): "The video talks about derivatives. It shows how to calculate them."
+GOOD (educational): "A derivative represents the instantaneous rate of change of a function. In practical terms, if you have a function describing position over time, the derivative tells you the velocity at any given moment. To calculate a derivative, we use the limit definition: taking the difference quotient as the interval approaches zero. For example, the derivative of f(x)=x² is 2x, which means..."
+
+Output Format: Respond ONLY with valid JSON (no markdown code blocks, no ```json):
+{
+  "text": "comprehensive, well-written educational summary with proper paragraphs",
+  "key_concepts": ["Concept 1: detailed explanation", "Concept 2: with context"],
+  "key_points": ["Specific insight with example", "Important detail explained"],
+  "coverage_score": 0.0-1.0
+}
+
+Quality over brevity. Education over compression. Rewrite, don't repeat."""
         
         # Get summary from Bedrock
         response = await self.bedrock_client.invoke_model(
@@ -387,32 +449,52 @@ Respond with valid JSON only."""
     ) -> str:
         """Build RAG prompt for summary generation"""
         
-        prompt = f"""Generate a concise educational summary of the following video segment.
+        # Extract additional context hints
+        visual_context_hint = request.visual_context_hint or segment.visual_description
+        key_concepts_hint = request.key_concepts_hint or segment.key_concepts
+        
+        transcript_length = len(segment.transcript) if segment.transcript else 0
+        has_full_transcript = transcript_length > 500  # Likely fetched from YouTube API
+        
+        prompt = f"""You are creating an educational summary for a student in rural India whose internet connection dropped while watching a learning video. Your goal is to help them continue learning WITHOUT the video.
 
-Video Segment ({segment.start_time:.1f}s - {segment.end_time:.1f}s):
-{segment.transcript}
+=== VIDEO INFORMATION ===
+Time Range: {segment.start_time:.1f}s - {segment.end_time:.1f}s ({segment.end_time - segment.start_time:.1f} seconds)
+Video Context: {visual_context_hint or 'Educational video'}
 
-Visual Elements:
-{segment.visual_description or 'No special visual elements'}
+=== SOURCE TRANSCRIPT ===
+{"[FULL TRANSCRIPT - " + str(transcript_length) + " characters]" if has_full_transcript else "[CAPTION SNIPPET - Limited]"}
+{segment.transcript if segment.transcript else '[No transcript available - generate based on visual context]'}
 
-User Context:
-- Current Bandwidth: {request.user_bandwidth_kbps:.0f} Kbps
-- Target Size: {request.target_size_kb or 'flexible'} KB
-- Priority: {request.priority}
+Previously Mentioned: {', '.join(key_concepts_hint) if key_concepts_hint else 'None yet'}
 
-Task: Create a summary that:
-1. Preserves all critical learning concepts
-2. Maintains educational value
-3. Is dramatically smaller than original (aim for <10% of original size)
-4. Can be understood without the video
+=== YOUR TASK ===
+Transform the raw transcript above into a **well-written educational summary** that:
 
-Respond with JSON:
+1. **REWRITES the content** - Don't copy the transcript verbatim. Improve grammar, structure, and clarity
+2. **EXPLAINS thoroughly** - Define technical terms, explain WHY things work, give context
+3. **ADDS educational value** - Connect concepts, provide examples, highlight implications  
+4. **STRUCTURES clearly** - Use proper paragraphs with topic sentences
+5. **DESCRIBES visuals** - If transcript says "as you can see" or mentions diagrams, explain what was likely shown
+6. **MAINTAINS continuity** - Help student understand where they are in the lesson
+
+IMPORTANT: Your summary should read like a **textbook explanation**, NOT like video captions.
+
+=== OUTPUT REQUIREMENTS ===
+- Length: 250-450 words (be thorough!)
+- Structure: Multiple clear paragraphs
+- Tone: Educational and explanatory
+- Quality: Something a student could learn from without the video
+
+Respond ONLY with valid JSON (no markdown, no code blocks):
 {{
-  "text": "Full summary text with all key concepts explained",
-  "key_concepts": ["concept1", "concept2", "concept3"],
-  "key_points": ["point 1", "point 2", "point 3"],
-  "coverage_score": 0.0-1.0
-}}"""
+  "text": "Start with an opening sentence that establishes context.\n\nThen explain the main concept in depth with proper paragraphs. Define technical terms. Give examples. Explain the reasoning and implications.\n\nConclude with key takeaways or how this connects to broader concepts.",
+  "key_concepts": ["Concept 1: Full explanation with context", "Concept 2: What it means and why it matters", "Concept 3: How it connects to other ideas"],
+  "key_points": ["Important insight with explanation", "Key example or demonstration described", "Practical implication or application"],
+  "coverage_score": {"0.90" if has_full_transcript else "0.70"}
+}}
+
+Remember: A student in rural India is relying on this to continue their education. Make it genuinely educational, not just a transcript copy."""
         
         return prompt
     

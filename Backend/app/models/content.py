@@ -66,7 +66,7 @@ class Summary(BaseModel):
     semantic_coverage_score: float = Field(default=0.0, ge=0.0, le=1.0, description="How well it covers original")
     
     generation_timestamp: float = Field(default_factory=lambda: datetime.now().timestamp())
-    model_version: str = Field(default="bedrock-claude-3.5-sonnet")
+    ai_model_version: str = Field(default="bedrock-claude-3.5-sonnet")
     
     class Config:
         json_schema_extra = {
@@ -86,7 +86,7 @@ class Summary(BaseModel):
                 "compression_ratio": 0.08,
                 "semantic_coverage_score": 0.92,
                 "generation_timestamp": 1709251200.0,
-                "model_version": "bedrock-claude-3.5-sonnet"
+                "ai_model_version": "bedrock-claude-3.5-sonnet"
             }
         }
 

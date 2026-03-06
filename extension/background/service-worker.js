@@ -3,17 +3,11 @@
  * The "Brain" of the extension - Orchestrates network monitoring and agent communication
  */
 
-// Backend API instance (will be initialized dynamically)
-let backendAPI = null;
-let isBackendAvailable = false;
-let BackendAPI = null;
+// Import Backend API Client (ES6 modules - Manifest V3)
+import { BackendAPI, backendAPI, API_CONFIG } from '../utils/api-client.js';
 
-// Try to import Backend API Client (Phase 2 Integration)
-try {
-  importScripts('../utils/api-client.js');
-} catch (error) {
-  console.warn('⚠️ Could not load api-client.js:', error.message);
-}
+// Backend API instance
+let isBackendAvailable = false;
 
 // ==========================================
 // 1. STATE MANAGEMENT
@@ -69,7 +63,7 @@ chrome.runtime.onStartup.addListener(async () => {
 // ==========================================
 async function initializeBackendConnection() {
   try {
-    backendAPI = typeof BackendAPI !== 'undefined' ? new BackendAPI() : null;
+    // backendAPI is already imported as a singleton from api-client.js
     if (backendAPI) {
       isBackendAvailable = await backendAPI.checkHealth();
       if (isBackendAvailable) {
@@ -596,9 +590,17 @@ async function handleSummaryRequest(data, tab) {
   }
   
   if (isBackendAvailable && backendAPI) {
-    console.log('🌐 Requesting summary from backend...');
+    console.log('🤖 Requesting AI summary from Amazon Bedrock backend...');
     const session = tab?.id ? (userSessions.get(tab.id) || {}) : {};
     const recent = telemetryHistory[telemetryHistory.length - 1] || {};
+    
+    console.log('📊 Sending context to Bedrock:', {
+      video_id: videoId,
+      has_captions: !!data?.captionsSnippet,
+      caption_length: data?.captionsSnippet?.length || 0,
+      has_title: !!data?.title,
+      bandwidth_kbps: (recent.downlink || 0.8) * 1000
+    });
 
     const backendSummary = await backendAPI.requestContentSummary({
       video_id: videoId,
@@ -614,12 +616,25 @@ async function handleSummaryRequest(data, tab) {
     });
 
     if (backendSummary) {
+      console.log('✅ Bedrock AI summary received:', {
+        summary_length: backendSummary.summary?.length || 0,
+        key_concepts: backendSummary.keyConcepts?.length || 0,
+        source: backendSummary.source
+      });
       await cacheSummary(cacheKey, backendSummary);
       return backendSummary;
+    } else {
+      console.warn('⚠️ Backend returned null - falling back to local summary');
     }
+  } else {
+    console.warn('⚠️ Backend unavailable - using local fallback (NOT using Amazon Bedrock AI)');
+    console.warn('   To enable Bedrock AI summaries:');
+    console.warn('   1. Start backend: cd Backend && python main.py');
+    console.warn('   2. Check backend URL matches in api-client.js');
+    console.warn('   3. Ensure AWS credentials configured for Bedrock');
   }
 
-  const fallbackSummary = generateMockSummary(videoId, currentTime);
+  const fallbackSummary = generateMockSummary(data, tab);
   await cacheSummary(cacheKey, fallbackSummary);
   return fallbackSummary;
 }
@@ -740,28 +755,159 @@ async function getActiveTab() {
   return tabs[0]?.id || null;
 }
 
-function generateMockSummary(videoId, currentTime) {
-  // Mock data for Phase 1 testing
+function generateMockSummary(data, tab) {
+  // Extract video metadata
+  const session = tab?.id ? (userSessions.get(tab.id) || {}) : {};
+  const videoId = data?.videoId || 'unknown';
+  const currentTime = data?.currentTime || 0;
+  const duration = data?.duration || session?.duration || 0;
+  const title = data?.title || session?.title || 'Video Content';
+  const channel = data?.channel || 'Content Creator';
+  const description = data?.description || null;
+  const captionsSnippet = data?.captionsSnippet || null;
+  const platform = data?.platform || 'web';
+  
+  // Calculate remaining time
+  const remainingTime = duration > 0 ? duration - currentTime : 0;
+  const progressPercent = duration > 0 ? ((currentTime / duration) * 100).toFixed(0) : 0;
+  
+  // Format time
+  const formatTime = (seconds) => {
+    const mins = Math.floor(seconds / 60);
+    const secs = Math.floor(seconds % 60);
+    return `${mins}:${secs.toString().padStart(2, '0')}`;
+  };
+  
+  // Generate key concepts based on title and description
+  const keyConcepts = [];
+  const titleLower = title.toLowerCase();
+  const descLower = (description || '').toLowerCase();
+  const combinedText = titleLower + ' ' + descLower;
+  
+  // Smart concept extraction based on content
+  if (combinedText.includes('ai') || combinedText.includes('artificial intelligence')) {
+    keyConcepts.push('Artificial Intelligence and Machine Learning');
+  }
+  if (combinedText.includes('education') || combinedText.includes('learning') || combinedText.includes('teach')) {
+    keyConcepts.push('Educational Methods and Pedagogy');
+  }
+  if (combinedText.includes('technology') || combinedText.includes('tech') || combinedText.includes('digital')) {
+    keyConcepts.push('Technology and Innovation');
+  }
+  if (combinedText.includes('chatgpt') || combinedText.includes('gpt') || combinedText.includes('language model')) {
+    keyConcepts.push('Large Language Models and ChatGPT');
+  }
+  if (combinedText.includes('student') || combinedText.includes('school') || combinedText.includes('classroom')) {
+    keyConcepts.push('Student Learning and Classroom Dynamics');
+  }
+  if (combinedText.includes('future') || combinedText.includes('transform')) {
+    keyConcepts.push('Future Trends and Transformations');
+  }
+  
+  // Add from captions if available
+  if (captionsSnippet) {
+    const captionLower = captionsSnippet.toLowerCase();
+    if (captionLower.includes('important') || captionLower.includes('key point')) {
+      keyConcepts.push('Critical Insights from Recent Discussion');
+    }
+  }
+  
+  // Add generic concepts if none were found
+  if (keyConcepts.length === 0) {
+    keyConcepts.push('Core Topic Introduction');
+    keyConcepts.push('Key Principles and Frameworks');
+    keyConcepts.push('Practical Applications');
+  }
+  
+  // Limit to 5 concepts
+  const finalConcepts = keyConcepts.slice(0, 5);
+  
+  // Generate summary text
+  let summaryText = `<div class="sanchar-video-info">
+    <h3>📺 ${title}</h3>
+    <p class="sanchar-meta">👤 ${channel}</p>
+    <p class="sanchar-meta">⏱️ Viewing position: ${formatTime(currentTime)} / ${formatTime(duration)} (${progressPercent}% complete)</p>
+    <p class="sanchar-meta">📍 Platform: ${platform.charAt(0).toUpperCase() + platform.slice(1)}</p>
+  </div>
+  
+  <div style="background: #fff4e6; border-left: 4px solid #ff9800; padding: 0.75rem 1rem; margin: 1rem 0; border-radius: 0.375rem;">
+    <p style="margin: 0; font-size: 0.875rem; color: #e65100;">
+      <strong>⚠️ Basic Fallback Mode:</strong> Backend unavailable - not using Amazon Bedrock AI. Start backend for intelligent educational summaries.
+    </p>
+  </div>
+  
+  <div class="sanchar-summary-section">
+    <h4>📝 Content Information</h4>
+    <p>You've been watching <strong>${title}</strong> by <strong>${channel}</strong>. You've reached ${formatTime(currentTime)} of the video.</p>`;
+  
+  // Add captions context if available - THIS IS THE ACTUAL VIDEO CONTENT
+  if (captionsSnippet && captionsSnippet.length > 0) {
+    summaryText += `
+    <div class="sanchar-caption-preview" style="background: #e8f5e9; border-left-color: #4caf50;">
+      <h5>🎤 What Was Just Said:</h5>
+      <p class="sanchar-caption-text" style="font-size: 1rem; line-height: 1.7; color: #1b5e20;">
+        "${captionsSnippet}"
+      </p>
+      <p style="font-size: 0.875rem; opacity: 0.7; margin-top: 0.75rem; color: #2e7d32;">
+        ✓ Captions captured | <strong>Note:</strong> With Bedrock AI enabled, you'd get a full educational summary explaining these concepts
+      </p>
+    </div>`;
+  } else {
+    summaryText += `
+    <div class="sanchar-caption-preview" style="background: #ffebee; border-left-color: #f44336;">
+      <h5>❌ No Captions Available:</h5>
+      <p style="margin: 0; font-size: 0.938rem; color: #c62828;">
+        Cannot extract content - captions (CC) not enabled on this video. Enable captions for content extraction.
+      </p>
+    </div>`;
+  }
+  
+  // Add description snippet if available
+  if (description && description.length > 20) {
+    summaryText += `
+    <div style="margin-top: 1rem; padding: 0.75rem; background: #f5f5f5; border-radius: 0.5rem; border-left: 3px solid #9e9e9e;">
+      <h5 style="font-size: 0.875rem; font-weight: 600; margin: 0 0 0.5rem 0; color: #424242;">📄 Video Description:</h5>
+      <p style="font-size: 0.938rem; margin: 0; line-height: 1.6; color: #616161;">${description}</p>
+    </div>`;
+  }
+  
+  summaryText += `
+    <p style="margin-top: 1rem;"><strong>What's Next:</strong> The video continues with approximately ${formatTime(remainingTime)} of content covering the key concepts listed below.</p>
+  </div>
+  
+  <div class="sanchar-info-box">
+    <p>⚡ <strong>Network Optimization Active:</strong> Instead of buffering or losing your place, you're viewing this information. With backend running, you'd see AI-generated educational summaries.</p>
+  </div>`;
+  
   return {
     videoId: videoId,
     timestamp: currentTime,
-    keyConcepts: [
-      'Introduction to the topic',
-      'Core principle explanation',
-      'Practical examples and applications'
-    ],
-    summary: `This is an AI-generated summary of the content. In a real implementation, this would contain the actual semantic distillation of the video content from timestamp ${currentTime}s onwards.`,
-    visualDescriptions: [
-      'The instructor demonstrates a concept on the whiteboard'
+    duration: duration,
+    title: title,
+    channel: channel,
+    keyConcepts: finalConcepts,
+    summary: summaryText,
+    visualDescriptions: captionsSnippet ? [
+      `Video by ${channel} with captions enabled`,
+      'Real-time content captured from live playback',
+      'Educational context preserved for offline viewing'
+    ] : [
+      `Video by ${channel}`,
+      'Visual content summary (enable captions for better context)',
+      'Educational content continues from this timestamp'
     ],
     keyFrame: {
-      url: 'https://images.unsplash.com/photo-1509228468518-180dd4864904?w=640&auto=format&fit=crop',
-      format: 'webp',
-      timestamp: currentTime
+      url: `https://img.youtube.com/vi/${videoId}/mqdefault.jpg`,
+      format: 'jpg',
+      timestamp: currentTime,
+      caption: `Frame at ${formatTime(currentTime)} - ${title}`
     },
     compressionRatio: 0.08, // 8% of original size
-    generatedBy: 'Fallback Generator (backend unavailable)',
-    generatedAt: Date.now()
+    dataSaved: '92%',
+    generatedBy: 'Sanchar Local Intelligence',
+    generatedAt: Date.now(),
+    captionsAvailable: !!captionsSnippet,
+    realVideoData: true // Flag to indicate real data was used
   };
 }
 

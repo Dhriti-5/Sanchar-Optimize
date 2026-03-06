@@ -84,6 +84,7 @@ class ResumeSyncResponse(BaseModel):
 class EnhancedTelemetryData(BaseModel):
     """Enhanced telemetry with session and location"""
     session_id: str
+    timestamp: Optional[float] = Field(None, description="Unix timestamp in milliseconds")
     signal_strength: float = Field(..., ge=0, le=100, description="Signal strength percentage")
     latency: float = Field(..., ge=0, description="Network latency in milliseconds")
     packet_loss: float = Field(0, ge=0, le=100, description="Packet loss percentage")

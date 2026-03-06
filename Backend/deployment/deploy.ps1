@@ -200,18 +200,22 @@ Write-Header "Building SAM Application"
 
 Set-Location $projectDir
 
-# Run SAM build
-Write-Info "Running SAM build..."
+# Run SAM build  
+Write-Info "Running SAM build (without container for faster build)..."
 if ($DryRun) {
-    sam build --template $lambdaDir\template-complete.yaml --debug --use-container
+    sam build --template $lambdaDir\template-complete.yaml --debug
 } else {
-    sam build --template $lambdaDir\template-complete.yaml --use-container 2>&1 | Tee-Object -FilePath "build.log"
+    sam build --template $lambdaDir\template-complete.yaml 2>&1 | Tee-Object -FilePath "$projectDir\build.log"
 }
 
 if ($LASTEXITCODE -eq 0) {
     Write-Success "SAM build completed"
 } else {
-    Write-Error "SAM build failed. Check build.log"
+    Write-Error "SAM build failed. Check build.log for details"
+    Write-Info "Common issues:"
+    Write-Info "  - Missing Python dependencies: pip install -r requirements.txt"
+    Write-Info "  - Invalid template syntax: sam validate --lint"
+    Write-Error "Build log saved to: $projectDir\build.log"
     exit 1
 }
 
@@ -259,12 +263,27 @@ if (-not $SkipDeploy) {
             --region $AwsRegion `
             --parameter-overrides EnvironmentName=$Environment AllowMockResponses=false `
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM `
-            --no-fail-on-empty-changeset 2>&1 | Tee-Object -FilePath "deploy.log"
+            --no-fail-on-empty-changeset 2>&1 | Tee-Object -FilePath "$projectDir\deploy.log"
         
         if ($LASTEXITCODE -eq 0) {
             Write-Success "CloudFormation deployment completed"
         } else {
-            Write-Error "CloudFormation deployment failed. Check deploy.log"
+            Write-Error "CloudFormation deployment failed"
+            Write-Info ""
+            Write-Info "Troubleshooting steps:"
+            Write-Info "1. Check deploy.log in: $projectDir\deploy.log"
+            Write-Info "2. View CloudFormation events:"
+            Write-Host "   aws cloudformation describe-stack-events --stack-name $StackName --region $AwsRegion --max-items 20"
+            Write-Info "3. Validate template:"
+            Write-Host "   sam validate --template $lambdaDir\template-complete.yaml --lint"
+            Write-Info "4. Check CloudFormation console:"
+            Write-Host "   https://console.aws.amazon.com/cloudformation/home?region=$AwsRegion"
+            Write-Info ""
+            Write-Info "Common deployment errors:"
+            Write-Info "  - IAM permissions: Ensure deploying user has CloudFormation, Lambda, API Gateway, S3, DynamoDB, Timestream permissions"
+            Write-Info "  - Resource limits: Check AWS service quotas"
+            Write-Info "  - Invalid parameters: Review template parameter values"
+            Write-Info "  - Bedrock access: Ensure Bedrock is enabled in your account"
             exit 1
         }
     }

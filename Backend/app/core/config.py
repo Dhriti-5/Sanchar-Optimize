@@ -33,6 +33,12 @@ class Settings(BaseSettings):
     BEDROCK_TEMPERATURE: float = 0.7
     BEDROCK_ALLOW_MOCK_RESPONSES: bool = False
     
+    # Google Gemini (Fallback AI Provider)
+    GEMINI_API_KEY: str = "your-gemini-api-key-here"
+    GEMINI_MODEL_ID: str = "gemini-pro"  # Stable production model with proven reliability
+    GEMINI_MAX_TOKENS: int = 4096
+    GEMINI_TEMPERATURE: float = 0.7
+    
     # Database
     TIMESTREAM_DATABASE: str = "sanchar_optimize"
     TIMESTREAM_TABLE: str = "network_telemetry"

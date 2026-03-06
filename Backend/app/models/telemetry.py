@@ -70,7 +70,6 @@ class SignalDropPrediction(BaseModel):
     """Predicted signal drop event"""
     
     model_config = {
-        "protected_namespaces": (),  # Allow "model_" prefix
         "json_schema_extra": {
             "example": {
                 "prediction_id": "pred_abc123",
@@ -81,7 +80,7 @@ class SignalDropPrediction(BaseModel):
                 "predicted_time_seconds": 3.5,
                 "predicted_bandwidth_kbps": 450.0,
                 "prediction_horizon_seconds": 5,
-                "model_version": "lstm_v1",
+                "ai_model_version": "lstm_v1",
                 "predictor_type": "lstm",
                 "features_used": ["signal_strength", "latency_ms", "gps_velocity_kmh"]
             }
@@ -100,7 +99,7 @@ class SignalDropPrediction(BaseModel):
     prediction_horizon_seconds: int = Field(default=5, description="Prediction time window")
     
     # Model metadata
-    model_version: str = Field(default="lstm_v1", description="Model version used")
+    ai_model_version: str = Field(default="lstm_v1", description="Model version used")
     predictor_type: str = Field(default="heuristic", description="Predictor type used (lstm/heuristic)") 
     features_used: list[str] = Field(default_factory=list, description="Features used for prediction")
 

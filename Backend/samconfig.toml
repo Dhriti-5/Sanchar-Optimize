@@ -1,0 +1,59 @@
+# SAM Configuration File for Sanchar-Optimize
+# This file stores default parameters for SAM CLI commands
+
+version = 0.1
+
+[default]
+[default.deploy]
+[default.deploy.parameters]
+stack_name = "sanchar-optimize-production"
+s3_bucket = "sanchar-optimize-sam-artifacts-740994137372"
+s3_prefix = "sanchar-optimize"
+region = "ap-south-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+parameter_overrides = "EnvironmentName=\"production\" AllowMockResponses=\"false\""
+disable_rollback = false
+
+[default.sync]
+[default.sync.parameters]
+watch = true
+
+[default.build]
+[default.build.parameters]
+cached = true
+parallel = true
+
+[default.validate]
+[default.validate.parameters]
+lint = true
+
+[development]
+[development.deploy]
+[development.deploy.parameters]
+stack_name = "sanchar-optimize-development"
+s3_prefix = "sanchar-optimize-dev"
+region = "ap-south-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+parameter_overrides = "EnvironmentName=development AllowMockResponses=true"
+
+[staging]
+[staging.deploy]
+[staging.deploy.parameters]
+stack_name = "sanchar-optimize-staging"
+s3_prefix = "sanchar-optimize-staging"
+region = "ap-south-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+parameter_overrides = "EnvironmentName=staging AllowMockResponses=false"
+
+[production]
+[production.deploy]
+[production.deploy.parameters]
+stack_name = "sanchar-optimize-production"
+s3_prefix = "sanchar-optimize"
+region = "ap-south-1"
+confirm_changeset = false
+capabilities = "CAPABILITY_IAM CAPABILITY_NAMED_IAM"
+parameter_overrides = "EnvironmentName=production AllowMockResponses=false"

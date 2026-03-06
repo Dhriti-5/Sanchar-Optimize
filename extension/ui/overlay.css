@@ -244,6 +244,69 @@
 }
 
 /* ==========================================
+   5.5. LEARNING CONTINUITY SECTIONS
+   ========================================== */
+.sanchar-pause-header {
+  text-align: center;
+  margin-bottom: 2rem;
+  padding: 1.5rem;
+  background: linear-gradient(135deg, #667eea22, #764ba222);
+  border-radius: 1rem;
+  border: 2px solid #667eea;
+}
+
+.sanchar-pause-header h3 {
+  font-size: 1.5rem;
+  font-weight: 700;
+  margin: 0;
+  color: #111827;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 0.75rem;
+}
+
+.sanchar-learning-section {
+  margin: 1.5rem 0;
+  padding: 1.5rem;
+  border-radius: 0.75rem;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.sanchar-learning-section h4 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sanchar-learning-section p {
+  margin: 0;
+  line-height: 1.7;
+  color: #374151;
+}
+
+.sanchar-learned {
+  background: #dcfce7;
+  border-left: 4px solid #10b981;
+}
+
+.sanchar-learned h4 {
+  color: #065f46;
+}
+
+.sanchar-next {
+  background: #dbeafe;
+  border-left: 4px solid #3b82f6;
+}
+
+.sanchar-next h4 {
+  color: #1e40af;
+}
+
+/* ==========================================
    6. KEY CONCEPTS
    ========================================== */
 .sanchar-key-concepts {
@@ -403,6 +466,87 @@
 }
 
 /* ==========================================
+   9.5. VIDEO INFO & ENHANCED SUMMARY STYLES
+   ========================================== */
+.sanchar-video-info {
+  margin-bottom: 1.5rem;
+  padding-bottom: 1rem;
+  border-bottom: 2px solid #e5e7eb;
+}
+
+.sanchar-video-info h3 {
+  font-size: 1.375rem;
+  font-weight: 700;
+  margin: 0 0 0.75rem 0;
+  color: #111827;
+  line-height: 1.3;
+}
+
+.sanchar-meta {
+  font-size: 0.875rem;
+  color: #6b7280;
+  margin: 0.25rem 0;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.sanchar-summary-section {
+  margin: 1.5rem 0;
+}
+
+.sanchar-summary-section h4 {
+  font-size: 1.125rem;
+  font-weight: 600;
+  margin: 0 0 1rem 0;
+  color: #111827;
+}
+
+.sanchar-summary-section p {
+  margin: 0.75rem 0;
+  line-height: 1.7;
+}
+
+.sanchar-caption-preview {
+  margin-top: 1rem;
+  padding: 1rem;
+  background: #f9fafb;
+  border-radius: 0.5rem;
+  border-left: 3px solid #667eea;
+}
+
+.sanchar-caption-preview h5 {
+  font-size: 0.875rem;
+  font-weight: 600;
+  margin: 0 0 0.5rem 0;
+  color: #4b5563;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.sanchar-caption-text {
+  font-style: italic;
+  color: #374151;
+  margin: 0;
+  line-height: 1.6;
+}
+
+.sanchar-info-box {
+  margin-top: 1.5rem;
+  padding: 1rem 1.25rem;
+  background: linear-gradient(135deg, #667eea22, #764ba222);
+  border-radius: 0.75rem;
+  border-left: 4px solid #667eea;
+}
+
+.sanchar-info-box p {
+  margin: 0;
+  font-size: 0.938rem;
+  color: #374151;
+  line-height: 1.6;
+}
+
+/* ==========================================
    10. RESPONSIVE DESIGN
    ========================================== */
 @media (max-width: 768px) {
@@ -454,4 +598,51 @@
 .sanchar-btn:focus {
   outline: 3px solid rgba(255, 255, 255, 0.5);
   outline-offset: 2px;
+}
+
+/* ==========================================
+   12. ANIMATIONS
+   ========================================== */
+@keyframes slideInRight {
+  from {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+  to {
+    transform: translateX(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOutRight {
+  from {
+    transform: translateX(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateX(400px);
+    opacity: 0;
+  }
+}
+
+@keyframes slideIn {
+  from {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
+  to {
+    transform: translateY(0);
+    opacity: 1;
+  }
+}
+
+@keyframes slideOut {
+  from {
+    transform: translateY(0);
+    opacity: 1;
+  }
+  to {
+    transform: translateY(-20px);
+    opacity: 0;
+  }
 }

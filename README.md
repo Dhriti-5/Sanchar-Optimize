@@ -100,46 +100,62 @@ Unlike reactive ABR, Sanchar-Optimize uses AI agents powered by **Amazon Bedrock
 - Geographic distribution for rural accessibility
 - Automatic failover to regional infrastructure
 
-## � Quick Start
+## 📊 Quick Start
 
-### Phase 1: Chrome Extension (✅ Complete)
-Chrome extension with local telemetry collection and heuristic prediction.
+### Prerequisites
+- Python 3.9+
+- Chrome Browser
+- AWS Account (for production deployment)
 
-### Phase 2: Backend & AI Integration (✅ Complete)
-Production-grade FastAPI backend with Amazon Bedrock integration.
+### Local Development Setup
 
-### Phase 3: LSTM Prediction & ML Pipeline (✅ Complete)
-Network prediction models with time-series analysis and training pipeline.
-
-### Phase 4: AWS Lambda Deployment (✅ Complete)
-Serverless deployment with Lambda functions, DynamoDB sessions, and production infrastructure.
-
-**Get Started in 5 Minutes:**
-
+**1. Backend Setup:**
 ```powershell
-# 1. Start the backend
+# Navigate to backend directory
 cd Backend
+
+# Create and activate virtual environment
 python -m venv venv
 .\venv\Scripts\Activate.ps1
+
+# Install dependencies
 pip install -r requirements.txt
+
+# Configure environment variables
+cp .env.example .env
+# Edit .env with your AWS credentials
+
+# Start the FastAPI server
 python main.py
-
-# 2. Load extension in Chrome
-# Go to chrome://extensions/
-# Enable "Developer mode"
-# Click "Load unpacked" → select extension/ folder
-
-# 3. Test on any YouTube video!
 ```
 
-**📖 See [START_HERE_DEPLOYMENT.md](START_HERE_DEPLOYMENT.md) for AWS deployment instructions.**
+**2. Chrome Extension Setup:**
+```powershell
+# Load extension in Chrome
+# 1. Navigate to chrome://extensions/
+# 2. Enable "Developer mode" (top right)
+# 3. Click "Load unpacked"
+# 4. Select the extension/ folder
+
+# Test on any YouTube video!
+```
+
+### AWS Deployment
+
+The application uses AWS Lambda, Amazon Bedrock, DynamoDB, and TimeStream for production deployment. Key deployment files:
+- `Backend/deployment/deploy.sh` - Automated deployment script
+- `Backend/samconfig.toml` - AWS SAM configuration
+
+For production deployment, ensure you have:
+- AWS CLI configured with appropriate credentials
+- Amazon Bedrock access enabled in your region
+- AWS SAM CLI installed
 
 ## 📚 Documentation
 
-- **[AWS Deployment Guide](START_HERE_DEPLOYMENT.md)** - Complete AWS deployment instructions
-- **[Backend README](Backend/README.md)** - Backend API documentation
+- **[Backend README](Backend/README.md)** - Backend API documentation and architecture
 - **[Requirements Document](requirements.md)** - Detailed functional requirements
-- **[Design Document](design.md)** - Architecture and implementation details
+- **[Design Document](design.md)** - System architecture and implementation details
 
 ## 🏆 Why This is Truly Agentic
 
@@ -152,6 +168,53 @@ Sanchar-Optimize demonstrates **genuine agentic behavior** because:
 5. **Goal-Oriented**: Optimizes for learning continuity and content preservation
 
 This is NOT just reactive quality adjustment—it's **cognitive content transformation** powered by AI agents.
+
+## 🛠️ Technology Stack
+
+### Backend
+- **FastAPI** - High-performance Python web framework
+- **Amazon Bedrock** - Claude 3.5 Sonnet for AI summarization
+- **AWS Lambda** - Serverless compute for edge processing
+- **DynamoDB** - Session persistence and state management
+- **Amazon TimeStream** - Time-series telemetry data storage
+- **LSTM Models** - Network prediction and pattern recognition
+
+### Frontend/Extension
+- **Chrome Extension API** - Browser integration
+- **JavaScript ES6+** - Modern client-side logic
+- **WebRTC** - Real-time network monitoring
+- **Service Workers** - Background processing
+
+### Infrastructure
+- **AWS SAM** - Serverless application deployment
+- **CloudWatch** - Monitoring and logging
+- **S3** - Static asset storage
+
+## 📁 Project Structure
+
+```
+Sanchar-Optimize/
+├── Backend/                 # FastAPI backend server
+│   ├── app/                # Application modules
+│   │   ├── api/           # API endpoints (health, content, telemetry, etc.)
+│   │   ├── aws/           # AWS service clients (Bedrock, DynamoDB, S3)
+│   │   ├── core/          # Core configuration and logging
+│   │   ├── lambda_handlers/  # AWS Lambda functions
+│   │   ├── ml/            # Machine learning models (LSTM)
+│   │   ├── models/        # Data models and schemas
+│   │   └── services/      # Business logic services
+│   ├── deployment/        # Deployment scripts and configs
+│   ├── scripts/           # Utility scripts (training, setup)
+│   └── main.py           # Application entry point
+├── extension/             # Chrome browser extension
+│   ├── background/       # Service worker scripts
+│   ├── content/          # Content scripts for page injection
+│   ├── popup/            # Extension popup UI
+│   ├── ui/               # Overlay and UI components
+│   └── utils/            # Helper utilities (API client, telemetry)
+├── design.md             # System design documentation
+└── requirements.md       # Functional requirements
+```
 
 ## 🌟 Impact
 
@@ -166,7 +229,5 @@ This is NOT just reactive quality adjustment—it's **cognitive content transfor
 **Built for AI for Bharat Hackathon 2026**
 
 - **Developer**: [@Dhriti-5](https://github.com/Dhriti-5)
-
-**Made with ❤️ for Bharat's Educational Future**
 
 *Transforming network instability from a barrier into an opportunity for intelligent content adaptation.*

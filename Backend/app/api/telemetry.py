@@ -5,6 +5,7 @@ Handles network telemetry ingestion and signal drop predictions
 
 from fastapi import APIRouter, HTTPException, status
 from typing import List
+from datetime import datetime
 import logging
 
 from app.models.telemetry import (
@@ -108,14 +109,18 @@ async def submit_enhanced_telemetry(telemetry: EnhancedTelemetryData):
         )
         
         # Also ingest into Network Sentry for real-time prediction
+        # Convert EnhancedTelemetryData to NetworkTelemetry with proper field mapping
+        timestamp_seconds = telemetry.timestamp / 1000.0 if telemetry.timestamp else datetime.now().timestamp()
+        
         basic_telemetry = NetworkTelemetry(
             device_id=telemetry.session_id,  # Use session_id as device_id
             session_id=telemetry.session_id,
-            signal_strength=telemetry.signal_strength,
-            latency=telemetry.latency,
-            bandwidth_mbps=telemetry.bandwidth_mbps,
-            velocity_kmh=telemetry.velocity_kmh,
-            packet_loss=telemetry.packet_loss
+            timestamp=timestamp_seconds,  # Convert milliseconds to seconds
+            signal_strength=telemetry.signal_strength / 100.0,  # Convert 0-100 to 0-1
+            latency_ms=int(telemetry.latency),  # Map latency to latency_ms
+            packet_loss_percent=telemetry.packet_loss,  # Map packet_loss to packet_loss_percent
+            bandwidth_kbps=telemetry.bandwidth_mbps * 1000,  # Convert Mbps to Kbps
+            gps_velocity_kmh=telemetry.velocity_kmh  # Map velocity_kmh to gps_velocity_kmh
         )
         
         sentry = get_network_sentry()

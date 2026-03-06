@@ -4,8 +4,10 @@
  */
 
 const API_CONFIG = {
-    // Update this to your backend URL
-    BASE_URL: 'http://localhost:8000/api/v1',
+    // IMPORTANT: Change this to your backend URL
+    // Local development: http://localhost:8000/api/v1
+    // Production AWS: https://2f8kolu7j4.execute-api.ap-south-1.amazonaws.com/production/api/v1
+    BASE_URL: 'https://2f8kolu7j4.execute-api.ap-south-1.amazonaws.com/production/api/v1',
     
     // Endpoints
     ENDPOINTS: {
@@ -608,8 +610,11 @@ class BackendAPI {
     }
 }
 
+// Export for ES6 modules (Manifest V3 service workers)
+export { BackendAPI, API_CONFIG };
+
 // Export singleton instance
-const backendAPI = new BackendAPI();
+export const backendAPI = new BackendAPI();
 
 // Check health on initialization (non-blocking)
 backendAPI.checkHealth().catch(err => {

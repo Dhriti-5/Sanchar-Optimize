@@ -2,9 +2,19 @@
 LSTM Time-Series Predictor for Network Signal Drop Prediction
 Implements the predictive monitoring component
 """
+from __future__ import annotations
 
-import numpy as np
-from typing import List, Optional, Tuple
+try:
+    import numpy as np
+    NUMPY_AVAILABLE = True
+except ImportError:
+    NUMPY_AVAILABLE = False
+    np = None
+
+from typing import List, Optional, Tuple, TYPE_CHECKING
+
+if TYPE_CHECKING:
+    import numpy as np
 import logging
 from datetime import datetime
 
@@ -41,8 +51,13 @@ class LSTMPredictor:
         self.prediction_horizon = 5  # Seconds ahead to predict
         
         # Feature normalization parameters (learned during training)
-        self.feature_means = np.array([0.7, 200.0, 5.0, 2000.0, 30.0])
-        self.feature_stds = np.array([0.2, 150.0, 8.0, 1500.0, 40.0])
+        if NUMPY_AVAILABLE:
+            self.feature_means = np.array([0.7, 200.0, 5.0, 2000.0, 30.0])
+            self.feature_stds = np.array([0.2, 150.0, 8.0, 1500.0, 40.0])
+        else:
+            self.feature_means = [0.7, 200.0, 5.0, 2000.0, 30.0]
+            self.feature_stds = [0.2, 150.0, 8.0, 1500.0, 40.0]
+            logger.warning("NumPy not available. Using heuristic-only prediction.")
         
         if model_path:
             self.load_model(model_path)
@@ -126,11 +141,10 @@ class LSTMPredictor:
         # Use most recent points
         recent_points = telemetry_history[-self.sequence_length:]
         
-        # Prepare features
-        features = self.prepare_features(recent_points)
-        
         # Use ML model if available, otherwise use heuristic
-        if self.model is not None:
+        if self.model is not None and NUMPY_AVAILABLE:
+            # Prepare features
+            features = self.prepare_features(recent_points)
             return self._predict_with_model(features, device_id, session_id)
         else:
             return self._predict_with_heuristic(recent_points, device_id, session_id)
@@ -179,7 +193,7 @@ class LSTMPredictor:
                     predicted_time_seconds=time_to_drop,
                     predicted_bandwidth_kbps=max(0, predicted_bandwidth),
                     prediction_horizon_seconds=self.prediction_horizon,
-                    model_version=self.model_version,
+                    ai_model_version=self.model_version,
                     features_used=["signal_strength", "latency_ms", "packet_loss_percent", 
                                    "bandwidth_kbps", "gps_velocity_kmh"],
                     predictor_type="lstm"
