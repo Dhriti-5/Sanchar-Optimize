@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Sanchar-Optimize - Judge Quick Start</title>
+    <style>
+        @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&display=swap');
+        
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Inter', sans-serif;
+            background: #f5f5f5;
+            padding: 20px;
+        }
+        
+        .card {
+            max-width: 800px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 16px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #0a0e14 0%, #1a1f2e 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2rem;
+            margin-bottom: 8px;
+            color: #00FF41;
+        }
+        
+        .header p {
+            font-size: 1rem;
+            color: #8b949e;
+        }
+        
+        .qr-section {
+            text-align: center;
+            padding: 30px;
+            background: #f9f9f9;
+            border-bottom: 2px solid #00FF41;
+        }
+        
+        .qr-placeholder {
+            width: 200px;
+            height: 200px;
+            margin: 0 auto 15px;
+            border: 3px dashed #00FF41;
+            border-radius: 12px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 0.875rem;
+            color: #666;
+            background: white;
+        }
+        
+        .url {
+            font-family: 'Courier New', monospace;
+            background: white;
+            padding: 12px 20px;
+            border-radius: 8px;
+            font-size: 1rem;
+            color: #0a0e14;
+            border: 2px solid #00FF41;
+            display: inline-block;
+            margin-top: 10px;
+        }
+        
+        .steps {
+            padding: 30px;
+        }
+        
+        .step {
+            display: flex;
+            gap: 20px;
+            margin-bottom: 25px;
+            padding-bottom: 25px;
+            border-bottom: 1px solid #e0e0e0;
+        }
+        
+        .step:last-child {
+            border-bottom: none;
+            margin-bottom: 0;
+            padding-bottom: 0;
+        }
+        
+        .step-number {
+            flex-shrink: 0;
+            width: 50px;
+            height: 50px;
+            background: #00FF41;
+            color: #000;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            font-size: 1.5rem;
+            font-weight: 700;
+        }
+        
+        .step-content h3 {
+            font-size: 1.125rem;
+            margin-bottom: 8px;
+            color: #0a0e14;
+        }
+        
+        .step-content p {
+            font-size: 0.9375rem;
+            color: #666;
+            line-height: 1.6;
+        }
+        
+        .step-content code {
+            background: #f5f5f5;
+            padding: 2px 8px;
+            border-radius: 4px;
+            font-size: 0.875rem;
+            color: #00FF41;
+        }
+        
+        .footer {
+            background: #0a0e14;
+            color: white;
+            padding: 20px 30px;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+        
+        .footer-left {
+            font-size: 0.875rem;
+            color: #8b949e;
+        }
+        
+        .footer-right {
+            font-weight: 600;
+            color: #00FF41;
+        }
+        
+        .highlight-box {
+            background: #fff8dc;
+            border-left: 4px solid #ffd700;
+            padding: 15px;
+            margin-top: 20px;
+            border-radius: 4px;
+        }
+        
+        .highlight-box strong {
+            color: #0a0e14;
+        }
+        
+        .tech-stack {
+            display: flex;
+            justify-content: center;
+            gap: 15px;
+            padding: 20px 30px;
+            background: #f9f9f9;
+            flex-wrap: wrap;
+        }
+        
+        .tech-badge {
+            background: white;
+            border: 1px solid #e0e0e0;
+            padding: 8px 16px;
+            border-radius: 20px;
+            font-size: 0.875rem;
+            color: #0a0e14;
+        }
+        
+        @media print {
+            body {
+                background: white;
+                padding: 0;
+            }
+            
+            .card {
+                box-shadow: none;
+                max-width: 100%;
+            }
+        }
+    </style>
+</head>
+<body>
+    <div class="card">
+        <div class="header">
+            <h1>Sanchar-Optimize</h1>
+            <p>Agentic Content Resiliency for Rural Bharat • AI for Bharat 2026</p>
+        </div>
+        
+        <div class="qr-section">
+            <h2 style="margin-bottom: 15px; font-size: 1.5rem;">📱 Scan to Test</h2>
+            <div class="qr-placeholder">
+                <div>
+                    <div style="font-size: 4rem; margin-bottom: 10px;">📷</div>
+                    <div>Replace with QR Code<br>to your deployed URL</div>
+                </div>
+            </div>
+            <div class="url" id="deployment-url">your-deployed-url.com</div>
+        </div>
+        
+        <div class="tech-stack">
+            <div class="tech-badge">⚡ FastAPI</div>
+            <div class="tech-badge">🧠 Amazon Bedrock</div>
+            <div class="tech-badge">🤖 Claude 3.5</div>
+            <div class="tech-badge">📊 LSTM Models</div>
+            <div class="tech-badge">⏱️ AWS Timestream</div>
+            <div class="tech-badge">🗄️ DynamoDB</div>
+        </div>
+        
+        <div class="steps">
+            <h2 style="margin-bottom: 25px; font-size: 1.5rem; text-align: center;">Test in 3 Steps (2 minutes)</h2>
+            
+            <div class="step">
+                <div class="step-number">1</div>
+                <div class="step-content">
+                    <h3>Download Extension</h3>
+                    <p>Click the green download button on the landing page to get <code>extension.zip</code>. Extract the ZIP file to any folder on your computer.</p>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">2</div>
+                <div class="step-content">
+                    <h3>Load in Chrome</h3>
+                    <p>Open Chrome and navigate to <code>chrome://extensions/</code>. Enable "Developer mode" (top-right toggle). Click "Load unpacked" and select the extracted folder.</p>
+                </div>
+            </div>
+            
+            <div class="step">
+                <div class="step-number">3</div>
+                <div class="step-content">
+                    <h3>Visit Educational Video</h3>
+                    <p>Click any of the test video links on the page (3Blue1Brown, Khan Academy, etc.). Watch the extension monitor network conditions in real-time!</p>
+                </div>
+            </div>
+            
+            <div class="highlight-box">
+                <strong>💡 Pro Tip for Judges:</strong> Open Chrome DevTools (F12) → Network tab → Throttle to "Fast 3G" to see the Network Sentry Agent trigger proactive mode and generate AI summaries before buffering occurs.
+            </div>
+        </div>
+        
+        <div class="footer">
+            <div class="footer-left">
+                AI for Bharat 2026 • Rural Education Track
+            </div>
+            <div class="footer-right">
+                Production Ready
+            </div>
+        </div>
+    </div>
+    
+    <script>
+        // Auto-detect if deployed URL is available
+        if (window.location.hostname !== 'localhost' && window.location.hostname !== '127.0.0.1') {
+            document.getElementById('deployment-url').textContent = window.location.origin;
+        }
+    </script>
+</body>
+</html>

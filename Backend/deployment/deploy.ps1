@@ -115,6 +115,32 @@ Write-Info "Project Directory: $projectDir"
 Write-Info "Backend Directory: $backendDir"
 Write-Info "Lambda Directory: $lambdaDir"
 
+# Load AI model settings from Backend/.env so deployed Lambda matches local tested config
+$envFilePath = Join-Path $backendDir ".env"
+$bedrockModelId = "anthropic.claude-3-haiku-20240307-v1:0"
+$geminiApiKey = ""
+$geminiModelId = "models/gemini-2.5-flash"
+
+if (Test-Path $envFilePath) {
+    $envLines = Get-Content $envFilePath
+    foreach ($line in $envLines) {
+        if ($line -match '^\s*#') { continue }
+        if ($line -match '^\s*BEDROCK_MODEL_ID\s*=\s*(.+)$') {
+            $bedrockModelId = $matches[1].Trim()
+        } elseif ($line -match '^\s*GEMINI_API_KEY\s*=\s*(.+)$') {
+            $geminiApiKey = $matches[1].Trim()
+        } elseif ($line -match '^\s*GEMINI_MODEL_ID\s*=\s*(.+)$') {
+            $geminiModelId = $matches[1].Trim()
+        }
+    }
+    Write-Info "Loaded AI model settings from Backend/.env"
+    Write-Info "BEDROCK_MODEL_ID: $bedrockModelId"
+    Write-Info "GEMINI_MODEL_ID: $geminiModelId"
+    if (-not $geminiApiKey) {
+        Write-Warning "GEMINI_API_KEY is empty in Backend/.env. Bedrock-only mode will be used."
+    }
+}
+
 # Check if required files exist
 $requiredFiles = @(
     "$lambdaDir\template-complete.yaml",
@@ -247,21 +273,37 @@ if (-not $SkipDeploy) {
     Write-Info "Region: $AwsRegion"
     
     if ($DryRun) {
+        $parameterOverrides = @(
+            "EnvironmentName=$Environment",
+            "AllowMockResponses=false",
+            "BedrockModelId=$bedrockModelId",
+            "GeminiApiKey=$geminiApiKey",
+            "GeminiModelId=$geminiModelId"
+        )
+
         sam deploy `
             --template .aws-sam/build/template.yaml `
             --stack-name $StackName `
             --s3-bucket $artifactBucket `
             --region $AwsRegion `
-            --parameter-overrides EnvironmentName=$Environment `
+            --parameter-overrides $parameterOverrides `
             --no-execute-changeset
         Write-Warning "DRY RUN: No resources created"
     } else {
+        $parameterOverrides = @(
+            "EnvironmentName=$Environment",
+            "AllowMockResponses=false",
+            "BedrockModelId=$bedrockModelId",
+            "GeminiApiKey=$geminiApiKey",
+            "GeminiModelId=$geminiModelId"
+        )
+
         sam deploy `
             --template .aws-sam/build/template.yaml `
             --stack-name $StackName `
             --s3-bucket $artifactBucket `
             --region $AwsRegion `
-            --parameter-overrides EnvironmentName=$Environment AllowMockResponses=false `
+            --parameter-overrides $parameterOverrides `
             --capabilities CAPABILITY_IAM CAPABILITY_NAMED_IAM `
             --no-fail-on-empty-changeset 2>&1 | Tee-Object -FilePath "$projectDir\deploy.log"
         

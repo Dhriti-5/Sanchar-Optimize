@@ -1,0 +1,9 @@
+{
+  "video_id": "dQw4w9WgXcQ",
+  "platform": "youtube",
+  "current_time": 60.0,
+  "duration": 300.0,
+  "title": "Test Video",
+  "bandwidth_kbps": 800,
+  "transcript_hint": "This is a test transcript for the video content."
+}

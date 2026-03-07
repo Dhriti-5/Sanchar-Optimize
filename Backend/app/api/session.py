@@ -80,10 +80,6 @@ async def create_session(
     except Exception as e:
         logger.error(f"Error creating session: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-        
-    except Exception as e:
-        logger.error(f"Error creating session: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
 
 
 @router.get("/{session_id}", response_model=dict)

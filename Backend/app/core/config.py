@@ -28,7 +28,7 @@ class Settings(BaseSettings):
     AWS_SECRET_ACCESS_KEY: str = ""
     
     # Amazon Bedrock
-    BEDROCK_MODEL_ID: str = "anthropic.claude-3-5-sonnet-20240620-v1:0"
+    BEDROCK_MODEL_ID: str = "anthropic.claude-3-haiku-20240307-v1:0"
     BEDROCK_MAX_TOKENS: int = 4096
     BEDROCK_TEMPERATURE: float = 0.7
     BEDROCK_ALLOW_MOCK_RESPONSES: bool = False
@@ -43,6 +43,8 @@ class Settings(BaseSettings):
     TIMESTREAM_DATABASE: str = "sanchar_optimize"
     TIMESTREAM_TABLE: str = "network_telemetry"
     DYNAMODB_TABLE_PREFIX: str = "sanchar_optimize"
+    DYNAMODB_SESSIONS_TABLE: str = ""  # Override with full table name (e.g., sanchar-optimize-sessions-production)
+    DYNAMODB_TRANSITIONS_TABLE: str = ""  # Override with full table name
     REDIS_URL: str = "redis://localhost:6379"
     
     # S3 Storage

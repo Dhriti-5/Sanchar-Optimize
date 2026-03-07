@@ -15,6 +15,9 @@ Metadata:
           - EnvironmentName
           - AllowMockResponses
           - LogLevel
+          - BedrockModelId
+          - GeminiApiKey
+          - GeminiModelId
 
 Parameters:
   EnvironmentName:
@@ -44,6 +47,22 @@ Parameters:
       - WARNING
       - ERROR
 
+  BedrockModelId:
+    Type: String
+    Default: anthropic.claude-3-haiku-20240307-v1:0
+    Description: Bedrock model ID used for AI generation
+
+  GeminiApiKey:
+    Type: String
+    Default: ''
+    NoEcho: true
+    Description: Gemini API key for fallback provider
+
+  GeminiModelId:
+    Type: String
+    Default: models/gemini-2.5-flash
+    Description: Gemini model ID for fallback provider
+
 
 Globals:
   Function:
@@ -59,6 +78,9 @@ Globals:
         ENVIRONMENT: !Ref EnvironmentName
         LOG_LEVEL: !Ref LogLevel
         BEDROCK_ALLOW_MOCK_RESPONSES: !Ref AllowMockResponses
+        BEDROCK_MODEL_ID: !Ref BedrockModelId
+        GEMINI_API_KEY: !Ref GeminiApiKey
+        GEMINI_MODEL_ID: !Ref GeminiModelId
         ALLOW_SYNTHETIC_CONTENT_FALLBACK: 'false'
 
 
@@ -105,17 +127,19 @@ Resources:
         Size: 2048
       Environment:
         Variables:
-          S3_BUCKET: !Ref ContentBucket
-          DYNAMODB_TABLE: !Ref SessionStateTable
-          BEDROCK_MODEL_ID: 'anthropic.claude-3-5-sonnet-20240620-v1:0'
+          S3_BUCKET_NAME: !Ref ContentBucket
+          DYNAMODB_SESSIONS_TABLE: !Sub 'sanchar-optimize-sessions-${EnvironmentName}'
+          DYNAMODB_TRANSITIONS_TABLE: !Sub 'sanchar-optimize-transitions-${EnvironmentName}'
       Policies:
         - AWSLambdaBasicExecutionRole
-        - S3ReadPolicy:
+        - S3CrudPolicy:
             BucketName: !Ref ContentBucket
         - DynamoDBCrudPolicy:
             TableName: !Ref SessionStateTable
         - DynamoDBCrudPolicy:
             TableName: !Ref ContentCacheTable
+        - DynamoDBCrudPolicy:
+            TableName: !Ref ModalityTransitionsTable
         - Statement:
             - Effect: Allow
               Action:
@@ -172,7 +196,7 @@ Resources:
       Description: Modality Orchestrator for AI-powered decisions
       Environment:
         Variables:
-          BEDROCK_MODEL_ID: 'anthropic.claude-3-5-sonnet-20240620-v1:0'
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
           DYNAMODB_TABLE: !Ref SessionStateTable
       Policies:
         - AWSLambdaBasicExecutionRole
@@ -202,11 +226,11 @@ Resources:
       Description: Multi-Modal Transformer for content summarization
       Environment:
         Variables:
-          S3_BUCKET: !Ref ContentBucket
-          BEDROCK_MODEL_ID: 'anthropic.claude-3-5-sonnet-20240620-v1:0'
+          S3_BUCKET_NAME: !Ref ContentBucket
+          BEDROCK_MODEL_ID: !Ref BedrockModelId
       Policies:
         - AWSLambdaBasicExecutionRole
-        - S3ReadPolicy:
+        - S3CrudPolicy:
             BucketName: !Ref ContentBucket
         - Statement:
             - Effect: Allow
@@ -310,6 +334,29 @@ Resources:
         - AttributeName: content_id
           KeyType: HASH
         - AttributeName: segment_start_time
+          KeyType: RANGE
+      TimeToLiveSpecification:
+        AttributeName: ttl
+        Enabled: true
+      Tags:
+        - Key: Environment
+          Value: !Ref EnvironmentName
+
+  # Modality Transitions Table - tracks user modality switches
+  ModalityTransitionsTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName: !Sub 'sanchar-optimize-transitions-${EnvironmentName}'
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+        - AttributeName: session_id
+          AttributeType: S
+        - AttributeName: timestamp
+          AttributeType: N
+      KeySchema:
+        - AttributeName: session_id
+          KeyType: HASH
+        - AttributeName: timestamp
           KeyType: RANGE
       TimeToLiveSpecification:
         AttributeName: ttl

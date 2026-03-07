@@ -23,8 +23,9 @@ class DynamoDBClient:
         """Initialize DynamoDB client"""
         self.client = None
         self.resource = None
-        self.table_name = f"{settings.DYNAMODB_TABLE_PREFIX}_sessions"
-        self.transitions_table_name = f"{settings.DYNAMODB_TABLE_PREFIX}_transitions"
+        # Use explicit table names from environment if provided, otherwise build from prefix
+        self.table_name = settings.DYNAMODB_SESSIONS_TABLE or f"{settings.DYNAMODB_TABLE_PREFIX}_sessions"
+        self.transitions_table_name = settings.DYNAMODB_TRANSITIONS_TABLE or f"{settings.DYNAMODB_TABLE_PREFIX}_transitions"
         self.available = False
         
         try:
@@ -96,12 +97,13 @@ class DynamoDBClient:
             table = self.resource.Table(self.table_name)
             
             now = datetime.now()
+            timestamp = int(now.timestamp())  # Unix timestamp as number
             ttl = int((now + timedelta(days=7)).timestamp())  # 7-day persistence
             
             item = {
                 'session_id': session_id,
-                'created_at': now.isoformat(),
-                'last_updated': now.isoformat(),
+                'created_at': timestamp,  # Number type to match DynamoDB schema
+                'last_updated': timestamp,
                 'user_agent': user_agent,
                 'platform': platform,
                 'current_modality': 'video',
@@ -175,10 +177,11 @@ class DynamoDBClient:
         try:
             table = self.resource.Table(self.table_name)
             
+            timestamp_now = int(datetime.now().timestamp())
             progress_data = self._serialize_for_dynamodb({
                 'timestamp': timestamp,
                 'modality': modality,
-                'last_updated': datetime.now().isoformat(),
+                'last_updated': timestamp_now,
                 'semantic_context': semantic_context or ''
             })
             
@@ -190,7 +193,7 @@ class DynamoDBClient:
                 },
                 ExpressionAttributeValues={
                     ':progress': progress_data,
-                    ':now': datetime.now().isoformat(),
+                    ':now': timestamp_now,
                     ':modality': modality
                 }
             )
@@ -264,17 +267,18 @@ class DynamoDBClient:
             table = self.resource.Table(self.transitions_table_name)
             
             now = datetime.now()
+            transition_timestamp = int(now.timestamp())  # Unix timestamp
             transition_id = f"{session_id}#{int(now.timestamp() * 1000)}"
             ttl = int((now + timedelta(days=30)).timestamp())  # 30-day retention
             
             item = self._serialize_for_dynamodb({
                 'transition_id': transition_id,
                 'session_id': session_id,
+                'timestamp': transition_timestamp,
                 'content_id': content_id,
                 'from_modality': from_modality,
                 'to_modality': to_modality,
                 'content_timestamp': timestamp,
-                'transition_time': now.isoformat(),
                 'reason': reason,
                 'network_conditions': network_conditions,
                 'ttl': ttl
@@ -367,11 +371,12 @@ class DynamoDBClient:
         try:
             table = self.resource.Table(self.table_name)
             cutoff_time = datetime.now() - timedelta(days=7)
+            cutoff_timestamp = int(cutoff_time.timestamp())
             
             # Scan for expired sessions
             response = table.scan(
                 FilterExpression='last_updated < :cutoff',
-                ExpressionAttributeValues={':cutoff': cutoff_time.isoformat()}
+                ExpressionAttributeValues={':cutoff': cutoff_timestamp}
             )
             
             count = 0

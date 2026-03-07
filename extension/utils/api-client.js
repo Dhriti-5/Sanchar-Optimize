@@ -8,6 +8,7 @@ const API_CONFIG = {
     // Local development: http://localhost:8000/api/v1
     // Production AWS: https://2f8kolu7j4.execute-api.ap-south-1.amazonaws.com/production/api/v1
     BASE_URL: 'https://2f8kolu7j4.execute-api.ap-south-1.amazonaws.com/production/api/v1',
+
     
     // Endpoints
     ENDPOINTS: {
